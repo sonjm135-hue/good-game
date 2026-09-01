@@ -27,10 +27,10 @@ else:
 
 st.markdown("""
 ### 🎮 NBA 컨트롤러 조작법
-* **이동**: `W` (앞), `S` (뒤), `A` (왼쪽), `D` (오른쪽) — **캐릭터가 움직이면 화면(카메라)이 NBA 게임처럼 함께 따라갑니다.**
+* **이동**: `W` (앞), `S` (뒤), `A` (왼쪽), `D` (오른쪽) — **화면(카메라)이 플레이어를 따라 움직입니다.**
 * **시점 회전**: `Q` (좌회전), `E` (우회전)
 * **점프**: `Space` 키
-* **슛 던지기**: **`J` 키 또는 마우스 클릭** (길게 누르고 있으면 슛 폼을 잡으며 게이지가 차오르고, 떼면 슛!)
+* **슛 던지기**: **`J` 키 또는 마우스 클릭** (길게 눌러 힘을 모으고, 떼면 디테일한 손으로 슛!)
 """)
 
 game_html = f"""<!DOCTYPE html>
@@ -50,7 +50,7 @@ game_html = f"""<!DOCTYPE html>
     <div id="canvas-container">
         <div id="ui">🔥 SCORE: <span id="score">0</span></div>
         <div id="power-bar-container"><div id="power-bar"></div></div>
-        <div id="guide-text">WASD: 이동 | Q/E: 시점 회전 | J / 마우스: 슛</div>
+        <div id="guide-text">WASD: 이동 | Q/E: 회전 | J / 마우스: 슛</div>
     </div>
 
 <script>
@@ -58,7 +58,6 @@ const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color({bg_color});
 
-// 카메라 설정 (NBA 3인칭/1인칭 추적 카메라)
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / (window.innerHeight * 0.75), 0.1, 1000);
 
 const renderer = new THREE.WebGLRenderer({{ antialias: true }});
@@ -74,22 +73,24 @@ dirLight.position.set(10, 25, 15);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
-// 경기장 바닥
+// 경기장
 const courtGeo = new THREE.BoxGeometry(20, 0.2, 28);
 const courtMat = new THREE.MeshStandardMaterial({{ color: {floor_color} }});
 const court = new THREE.Mesh(courtGeo, courtMat);
 court.position.y = 0;
 scene.add(court);
 
-// 페인트 존
 const paintGeo = new THREE.BoxGeometry(5.5, 0.22, 9);
 const paintMat = new THREE.MeshStandardMaterial({{ color: {paint_color} }});
 const paintArea = new THREE.Mesh(paintGeo, paintMat);
 paintArea.position.set(0, 0, -9.5);
 scene.add(paintArea);
 
-// 골대
+// 골대 및 충돌 데이터
 const rimPos = new THREE.Vector3(0, 3.05, -11);
+const rimRadius = 0.45;
+const ballRadius = 0.22;
+
 const poleGeo = new THREE.CylinderGeometry(0.1, 0.1, 4.5);
 const poleMat = new THREE.MeshStandardMaterial({{ color: 0x333333 }});
 const pole = new THREE.Mesh(poleGeo, poleMat);
@@ -102,35 +103,65 @@ const board = new THREE.Mesh(boardGeo, boardMat);
 board.position.set(0, 3.5, -11.8);
 scene.add(board);
 
-const rimGeo = new THREE.TorusGeometry(0.42, 0.04, 12, 24);
+const rimGeo = new THREE.TorusGeometry(rimRadius, 0.04, 12, 24);
 const rimMat = new THREE.MeshStandardMaterial({{ color: 0xdd2c00 }});
 const rim = new THREE.Mesh(rimGeo, rimMat);
 rim.rotation.x = Math.PI / 2;
 rim.position.copy(rimPos);
 scene.add(rim);
 
-// 플레이어 캐릭터 그룹 (위치 & 회전)
+// 플레이어 그룹
 const playerGroup = new THREE.Group();
 playerGroup.position.set(0, 1.0, 5);
 scene.add(playerGroup);
 
-// 오른손 & 지닌 농구공
-const handGeo = new THREE.CylinderGeometry(0.05, 0.06, 0.5);
-const handMat = new THREE.MeshStandardMaterial({{ color: 0x333333 }});
-const rightArm = new THREE.Mesh(handGeo, handMat);
-rightArm.rotation.z = -Math.PI / 6;
-rightArm.rotation.x = Math.PI / 4;
-rightArm.position.set(0.3, 0.2, 0.2);
-playerGroup.add(rightArm);
+// --- 진짜 같은 디테일 손 모델 생성 (손목, 손바닥, 5개 손가락) ---
+const skinMat = new THREE.MeshStandardMaterial({{ color: 0xd2b48c, roughness: 0.6 }});
+const handGroup = new THREE.Group();
 
-const heldBallGeo = new THREE.SphereGeometry(0.22, 16, 16);
+// 손목 & 팔
+const armGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.45, 12);
+const armMesh = new THREE.Mesh(armGeo, skinMat);
+armMesh.position.set(0, 0, 0);
+handGroup.add(armMesh);
+
+// 손바닥
+const palmGeo = new THREE.BoxGeometry(0.12, 0.15, 0.05);
+const palmMesh = new THREE.Mesh(palmGeo, skinMat);
+palmMesh.position.set(0, 0.25, 0);
+handGroup.add(palmMesh);
+
+// 손가락 생성 함수
+function createFinger(radius, length, x, y, z, rotZ) {{
+    const fingerGeo = new THREE.CylinderGeometry(radius, radius * 0.8, length, 8);
+    const fingerMesh = new THREE.Mesh(fingerGeo, skinMat);
+    fingerMesh.position.set(x, y, z);
+    fingerMesh.rotation.z = rotZ;
+    return fingerMesh;
+}}
+
+// 5개 손가락 추가 (엄지, 검지, 중지, 약지, 새끼)
+const thumb = createFinger(0.02, 0.08, -0.07, 0.22, 0.02, Math.PI / 4);
+const indexF = createFinger(0.018, 0.11, -0.04, 0.35, 0.01, -0.05);
+const middleF = createFinger(0.018, 0.12, 0, 0.36, 0, 0);
+const ringF = createFinger(0.017, 0.10, 0.04, 0.34, 0, 0.05);
+const pinkyF = createFinger(0.015, 0.08, 0.07, 0.31, -0.01, 0.1);
+
+handGroup.add(thumb, indexF, middleF, ringF, pinkyF);
+
+handGroup.position.set(0.3, 0.1, 0.2);
+handGroup.rotation.x = Math.PI / 3;
+playerGroup.add(handGroup);
+
+// 지닌 농구공
+const heldBallGeo = new THREE.SphereGeometry(ballRadius, 16, 16);
 const heldBallMat = new THREE.MeshStandardMaterial({{ color: 0xe67e22 }});
 const heldBall = new THREE.Mesh(heldBallGeo, heldBallMat);
-heldBall.position.set(0.3, 0.45, 0.35);
+heldBall.position.set(0.3, 0.48, 0.25);
 playerGroup.add(heldBall);
 
-// 키보드 상태 관리
-const keys = {{ w: false, a: false, s: false, d: false, q: false, e: false, space: false, shoot: false }};
+// 키보드 조작
+const keys = {{ w: false, a: false, s: false, d: false, q: false, e: false, space: false }};
 
 window.addEventListener('keydown', (evt) => {{
     const k = evt.key.toLowerCase();
@@ -156,7 +187,6 @@ window.addEventListener('keyup', (evt) => {{
     if (k === 'j') releaseShoot();
 }});
 
-// 마우스 클릭으로도 슛 가능하도록 지원
 window.addEventListener('mousedown', () => {{ startCharging(); }});
 window.addEventListener('mouseup', () => {{ releaseShoot(); }});
 
@@ -191,16 +221,14 @@ function releaseShoot() {{
 
 function shootBall(power) {{
     const ballMesh = new THREE.Mesh(heldBallGeo, heldBallMat);
-    
-    // 플레이어의 전방 방향 계산
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(playerGroup.quaternion).normalize();
     
-    ballMesh.position.copy(playerGroup.position).add(new THREE.Vector3(0, 0.5, 0));
+    ballMesh.position.copy(playerGroup.position).add(new THREE.Vector3(0, 0.6, 0));
     scene.add(ballMesh);
 
-    const speed = 0.20 + (power / 100) * 0.25;
+    const speed = 0.20 + (power / 100) * 0.24;
     const ballVelocity = dir.clone().multiplyScalar(speed);
-    ballVelocity.y += 0.12 + (power / 100) * 0.06;
+    ballVelocity.y += 0.12 + (power / 100) * 0.05;
 
     activeBalls.push({{
         mesh: ballMesh,
@@ -212,7 +240,7 @@ function shootBall(power) {{
 function animate() {{
     requestAnimationFrame(animate);
 
-    // 1. 이동 및 시점 회전 (WASD / QE)
+    // 1. 이동 및 시점 회전
     const moveSpeed = 0.10;
     const rotSpeed = 0.03;
 
@@ -228,7 +256,7 @@ function animate() {{
     moveDir.applyQuaternion(playerGroup.quaternion);
     playerGroup.position.add(moveDir);
 
-    // 2. 점프 처리
+    // 2. 점프
     if (keys.space && !isJumping) {{
         jumpVel = 0.14;
         isJumping = true;
@@ -243,48 +271,62 @@ function animate() {{
     }}
     playerGroup.position.y = playerPosY;
 
-    // 3. NBA 화면 추적 카메라 (캐릭터 위치와 회전에 맞춰 카메라가 부드럽게 추종)
+    // 3. 카메라 추적
     const camOffset = new THREE.Vector3(0, 0.8, 0.5).applyQuaternion(playerGroup.quaternion);
     camera.position.copy(playerGroup.position).add(camOffset);
-    
-    const lookTarget = playerGroup.position.clone().add(
-        new THREE.Vector3(0, 0.4, -4).applyQuaternion(playerGroup.quaternion)
-    );
+    const lookTarget = playerGroup.position.clone().add(new THREE.Vector3(0, 0.4, -4).applyQuaternion(playerGroup.quaternion));
     camera.lookAt(lookTarget);
 
-    // 4. 슛 모션 & 게이지
+    // 4. 진짜 손 슛 스냅 애니메이션
     if (isCharging) {{
         chargePower = Math.min(100, chargePower + 2.5);
         powerBar.style.width = chargePower + '%';
-        heldBall.position.y = 0.45 + (chargePower / 100) * 0.25;
-        rightArm.rotation.x = Math.PI / 4 - (chargePower / 100) * 0.3;
+        heldBall.position.y = 0.48 + (chargePower / 100) * 0.25;
+        handGroup.rotation.x = Math.PI / 3 - (chargePower / 100) * 0.4; // 손목 스냅
     }} else {{
-        heldBall.position.y = 0.45;
-        rightArm.rotation.x = Math.PI / 4;
+        heldBall.position.y = 0.48;
+        handGroup.rotation.x = Math.PI / 3;
     }}
 
-    // 5. 공 물리 및 득점 판정
+    // 5. 공 물리 & 골대/백보드 충돌 및 득점 판정
     for (let i = activeBalls.length - 1; i >= 0; i--) {{
         const b = activeBalls[i];
-        b.vel.y -= 0.006;
+        b.vel.y -= 0.006; // 중력
         b.mesh.position.add(b.vel);
 
-        // 바닥 튕김
-        if (b.mesh.position.y < 0.22) {{
-            b.mesh.position.y = 0.22;
-            b.vel.y *= -0.5;
+        const pos = b.mesh.position;
+
+        // [충돌 1] 백보드 부딪힘 처리 (리바운드)
+        if (pos.z <= -11.72 && pos.z >= -11.88 && Math.abs(pos.x) < 0.9 && pos.y >= 2.95 && pos.y <= 4.05) {{
+            b.vel.z *= -0.65; // 뒤로 튕겨냄
+            pos.z = -11.70;
         }}
 
-        // 림 통과 판정
-        const distToRim = b.mesh.position.distanceTo(rimPos);
-        if (distToRim < 0.48 && b.vel.y < 0 && !b.isScored) {{
-            score++;
+        // [충돌 2] 림(Rim) 원형 부딪힘 처리
+        const distToRimCenter = Math.hypot(pos.x - rimPos.x, pos.z - rimPos.z);
+        if (Math.abs(pos.y - rimPos.y) < 0.15 && Math.abs(distToRimCenter - rimRadius) < 0.12) {{
+            // 림 테두리에 맞으면 반대 방향으로 튕김
+            const bounceDir = new THREE.Vector3(pos.x - rimPos.x, 0.2, pos.z - rimPos.z).normalize();
+            b.vel.x = bounceDir.x * 0.08;
+            b.vel.z = bounceDir.z * 0.08;
+            b.vel.y = Math.abs(b.vel.y) * 0.5;
+        }}
+
+        // [충돌 3] 바닥 튕김
+        if (pos.y < 0.22) {{
+            pos.y = 0.22;
+            b.vel.y *= -0.55;
+        }}
+
+        // [득점 판정] 림 중앙을 위에서 아래로 깨끗이 또는 부딪혀서 통과할 때
+        if (distToRimCenter < (rimRadius - 0.05) && Math.abs(pos.y - rimPos.y) < 0.18 && b.vel.y < 0 && !b.isScored) {{
+            score += 2;
             document.getElementById('score').innerText = score;
             b.isScored = true;
         }}
 
-        // 경기장 밖 아웃 처리
-        if (b.mesh.position.z < -20 || b.mesh.position.y < 0) {{
+        // 경기장 이탈 시 제거
+        if (pos.z < -20 || pos.y < 0) {{
             scene.remove(b.mesh);
             activeBalls.splice(i, 1);
         }}
