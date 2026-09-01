@@ -2,249 +2,156 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="🏀 3D 커리 vs 르브론 1v1 배틀",
+    page_title="🏀 3D 1인칭 커리 슛 연습장",
     page_icon="🏀",
     layout="wide"
 )
 
-st.title("🏀 3D 스트리트 농구 배틀: 커리 vs 르브론")
-st.caption("Three.js 3D 엔진으로 구현된 실시간 2인용 농구 게임!")
+st.title("🏀 3D 1인칭 농구 게임 (커리 시점)")
+st.caption("화면을 클릭하여 시점을 전환하고, 마우스 왼쪽 클릭으로 슛을 쏴보세요!")
 
 st.markdown("""
-| 선수 | 3D 캐릭터 | 이동 키 | 슛 키 |
-| :--- | :--- | :--- | :--- |
-| **🔴 P1 (왼쪽)** | **스테판 커리** | `W`, `A`, `S`, `D` | `F` |
-| **🔵 P2 (오른쪽)** | **르브론 제임스** | `↑`, `←`, `↓`, `→` | `Enter` |
+| 동작 | 키보드 / 마우스 조작 |
+| :--- | :--- |
+| **시점 전환** | 게임 화면 클릭 후 **마우스 이동** |
+| **이동** | `W`, `A`, `S`, `D` |
+| **점프** | `Space` 키 |
+| **슛 던지기** | **마우스 왼쪽 버튼 (길게 누를수록 파워 증가)** |
 """)
 
-game_3d_html = """
+game_1st_person_html = """
 <!DOCTYPE html>
 <html>
 <head>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        #canvas-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        #ui { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around; color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px #000; pointer-events: none; }
+        #canvas-container { width: 100vw; height: 80vh; display: flex; justify-content: center; align-items: center; position: relative; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px #000; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.8); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        #power-bar-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 200px; height: 15px; border: 2px solid #fff; display: none; background: rgba(0,0,0,0.5); }
+        #power-bar { width: 0%; height: 100%; background: #e74c3c; }
     </style>
-    <!-- Three.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 </head>
 <body>
-    <div id="ui">
-        <div id="p1-score">🔥 커리: 0</div>
-        <div id="p2-score">👑 르브론: 0</div>
+    <div id="canvas-container">
+        <div id="ui">🔥 SUCCESS SCORE: <span id="score">0</span></div>
+        <div id="crosshair"></div>
+        <div id="power-bar-container"><div id="power-bar"></div></div>
     </div>
-    <div id="canvas-container"></div>
 
 <script>
-// 1. 씬, 카메라, 렌더러 설정
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a2e);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 15, 30);
-camera.lookAt(0, 5, 0);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight * 0.8), 0.1, 1000);
+camera.position.set(0, 2, 8); // 카메라이자 플레이어의 위치
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(800, 450);
+renderer.setSize(window.innerWidth * 0.95, window.innerHeight * 0.75);
 renderer.shadowMap.enabled = true;
 container.appendChild(renderer.domElement);
 
-// 2. 조명 설정
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambientLight);
+// 포인터 락 조작 (1인칭 시점)
+const controls = new THREE.PointerLockControls(camera, renderer.domElement);
+container.addEventListener('click', () => { controls.lock(); });
 
+// 조명
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(10, 30, 20);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
-// 3. 3D 농구 코트 및 골대 생성
-// 코트 바닥
-const courtGeo = new THREE.BoxGeometry(30, 0.5, 16);
+// 코트
+const courtGeo = new THREE.BoxGeometry(20, 0.2, 30);
 const courtMat = new THREE.MeshStandardMaterial({ color: 0xd35400 });
 const court = new THREE.Mesh(courtGeo, courtMat);
-court.position.y = -0.25;
-court.receiveShadow = true;
+court.position.y = 0;
 scene.add(court);
 
-// 골대 생성 함수
-function createHoop(x, isLeft) {
-    const group = new THREE.Group();
-    // 기둥
-    const poleGeo = new THREE.CylinderGeometry(0.2, 0.2, 8);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(x, 4, 0);
-    group.add(pole);
+// 골대 생성
+const rimPos = new THREE.Vector3(0, 3.05, -12); // 표준 골대 높이/위치
+const poleGeo = new THREE.CylinderGeometry(0.1, 0.1, 4);
+const poleMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
+const pole = new THREE.Mesh(poleGeo, poleMat);
+pole.position.set(0, 2, -13);
+scene.add(pole);
 
-    // 백보드
-    const boardGeo = new THREE.BoxGeometry(0.2, 3, 4);
-    const boardMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-    const board = new THREE.Mesh(boardGeo, boardMat);
-    board.position.set(x, 7, 0);
-    group.add(board);
+const boardGeo = new THREE.BoxGeometry(1.8, 1.05, 0.1);
+const boardMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+const board = new THREE.Mesh(boardGeo, boardMat);
+board.position.set(0, 3.5, -12.8);
+scene.add(board);
 
-    // 림 (골대 고리)
-    const rimGeo = new THREE.TorusGeometry(1, 0.1, 8, 24);
-    const rimMat = new THREE.MeshStandardMaterial({ color: 0xe74c3c });
-    const rim = new THREE.Mesh(rimGeo, rimMat);
-    rim.rotation.x = Math.PI / 2;
-    rim.position.set(isLeft ? x + 1.2 : x - 1.2, 6, 0);
-    group.add(rim);
+const rimGeo = new THREE.TorusGeometry(0.45, 0.05, 12, 24);
+const rimMat = new THREE.MeshStandardMaterial({ color: 0xe74c3c });
+const rim = new THREE.Mesh(rimGeo, rimMat);
+rim.rotation.x = Math.PI / 2;
+rim.position.copy(rimPos);
+scene.add(rim);
 
-    scene.add(group);
-    return rim.position;
-}
-
-const leftRimPos = createHoop(-14, true);
-const rightRimPos = createHoop(14, false);
-
-// 4. 3D 캐릭터 생성 (커리 & 르브론)
-function createPlayer(color) {
-    const group = new THREE.Group();
-    // 몸통
-    const bodyGeo = new THREE.BoxGeometry(1.5, 2, 1);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: color });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 1;
-    body.castShadow = true;
-    group.add(body);
-
-    // 머리
-    const headGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 2.6;
-    head.castShadow = true;
-    group.add(head);
-
-    scene.add(group);
-    return group;
-}
-
-const p1Mesh = createPlayer(0xf1c40f); // 커리 (골든스테이트 노란색)
-const p2Mesh = createPlayer(0x551a8b); // 르브론 (레이커스 보라색)
-
-// 5. 3D 농구공 생성
-const ballGeo = new THREE.SphereGeometry(0.6, 16, 16);
+// 공 객체들
+const ballGeo = new THREE.SphereGeometry(0.24, 16, 16);
 const ballMat = new THREE.MeshStandardMaterial({ color: 0xe67e22 });
-const ballMesh = new THREE.Mesh(ballGeo, ballMat);
-ballMesh.castShadow = true;
-scene.add(ballMesh);
 
-// 게임 데이터 상태
-let p1 = { x: -8, y: 0, z: 0, vx: 0, vy: 0, vz: 0, score: 0, mesh: p1Mesh };
-let p2 = { x: 8, y: 0, z: 0, vx: 0, vy: 0, vz: 0, score: 0, mesh: p2Mesh };
-let ball = { x: 0, y: 5, z: 0, vx: 0, vy: 0, vz: 0, holder: null, mesh: ballMesh };
+let activeBalls = [];
+let score = 0;
 
-const gravity = -0.015;
-const speed = 0.15;
-const jump = 0.35;
+// 조작 키
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+let velocity = new THREE.Vector3();
+let canJump = true;
 
-const keys = {};
-window.addEventListener('keydown', e => { 
-    keys[e.key] = true; 
-    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Enter"].indexOf(e.key) > -1) e.preventDefault();
-});
-window.addEventListener('keyup', e => { keys[e.key] = false; });
-
-// 6. 물리 및 게임 루프
-function update() {
-    // P1 (커리) WASD 이동
-    p1.vx = 0; p1.vz = 0;
-    if (keys['a'] || keys['A']) p1.vx = -speed;
-    if (keys['d'] || keys['D']) p1.vx = speed;
-    if (keys['w'] || keys['W']) p1.vz = -speed;
-    if (keys['s'] || keys['S']) p1.vz = speed;
-    if ((keys['f'] || keys['F']) && p1.y <= 0 && ball.holder === p1) shootBall(p1, 1);
-
-    // P2 (르브론) 화살표 이동
-    p2.vx = 0; p2.vz = 0;
-    if (keys['ArrowLeft']) p2.vx = -speed;
-    if (keys['ArrowRight']) p2.vx = speed;
-    if (keys['ArrowUp']) p2.vz = -speed;
-    if (keys['ArrowDown']) p2.vz = speed;
-    if (keys['Enter'] && p2.y <= 0 && ball.holder === p2) shootBall(p2, -1);
-
-    // 위치 업데이트 및 3D 매핑
-    [p1, p2].forEach(p => {
-        p.x += p.vx;
-        p.z += p.vz;
-        // 코트 경계 제한
-        p.x = Math.max(-13, Math.min(13, p.x));
-        p.z = Math.max(-6, Math.min(6, p.z));
-
-        p.mesh.position.set(p.x, p.y, p.z);
-    });
-
-    // 공 물리
-    if (ball.holder) {
-        ball.x = ball.holder.x;
-        ball.y = ball.holder.y + 2;
-        ball.z = ball.holder.z;
-    } else {
-        ball.vy += gravity;
-        ball.x += ball.vx;
-        ball.y += ball.vy;
-        ball.z += ball.vz;
-
-        // 바닥 바운드
-        if (ball.y < 0.6) {
-            ball.y = 0.6;
-            ball.vy *= -0.6;
-        }
-
-        // 공 소유 판정
-        [p1, p2].forEach(p => {
-            let dist = Math.hypot(p.x - ball.x, p.z - ball.z);
-            if (dist < 1.8 && Math.abs(p.y - ball.y) < 2) {
-                ball.holder = p;
-            }
-        });
-
-        // 득점 판정
-        if (ball.vy < 0) {
-            if (Math.hypot(ball.x - leftRimPos.x, ball.z - leftRimPos.z) < 1.5 && Math.abs(ball.y - leftRimPos.y) < 1) {
-                p2.score += 2;
-                document.getElementById('p2-score').innerText = `👑 르브론: ${p2.score}`;
-                resetBall();
-            }
-            if (Math.hypot(ball.x - rightRimPos.x, ball.z - rightRimPos.z) < 1.5 && Math.abs(ball.y - rightRimPos.y) < 1) {
-                p1.score += 2;
-                document.getElementById('p1-score').innerText = `🔥 커리: ${p1.score}`;
-                resetBall();
-            }
-        }
+window.addEventListener('keydown', (e) => {
+    switch (e.code) {
+        case 'KeyW': moveForward = true; break;
+        case 'KeyS': moveBackward = true; break;
+        case 'KeyA': moveLeft = true; break;
+        case 'KeyD': moveRight = true; break;
+        case 'Space': if (canJump) velocity.y += 0.15; canJump = false; break;
     }
+});
 
-    ball.mesh.position.set(ball.x, ball.y, ball.z);
-}
+window.addEventListener('keyup', (e) => {
+    switch (e.code) {
+        case 'KeyW': moveForward = false; break;
+        case 'KeyS': moveBackward = false; break;
+        case 'KeyA': moveLeft = false; break;
+        case 'KeyD': moveRight = false; break;
+    }
+});
 
-function shootBall(player, dir) {
-    ball.holder = null;
-    ball.vx = dir * 0.3;
-    ball.vy = 0.45;
-    ball.vz = (0 - player.z) * 0.05;
-}
+// 슛 게이지
+let isCharging = false;
+let chargePower = 0;
+const powerBarContainer = document.getElementById('power-bar-container');
+const powerBar = document.getElementById('power-bar');
 
-function resetBall() {
-    ball.holder = null;
-    ball.x = 0; ball.y = 6; ball.z = 0;
-    ball.vx = 0; ball.vy = 0; ball.vz = 0;
-}
+window.addEventListener('mousedown', (e) => {
+    if (controls.isLocked && e.button === 0) {
+        isCharging = true;
+        chargePower = 0;
+        powerBarContainer.style.display = 'block';
+    }
+});
 
-function animate() {
-    requestAnimationFrame(animate);
-    update();
-    renderer.render(scene, camera);
-}
+window.addEventListener('mouseup', (e) => {
+    if (controls.isLocked && isCharging && e.button === 0) {
+        shootBall(chargePower);
+        isCharging = false;
+        powerBarContainer.style.display = 'none';
+    }
+});
 
-animate();
-</script>
-</body>
-</html>
-"""
-
-components.html(game_3d_html, height=500)
+function shootBall(power) {
+    const ballMesh = new THREE.Mesh(ballGeo, ballMat);
+    
+    // 시점 바로 앞에서 발사
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    
+    ballMesh.position.copy(camera.position
