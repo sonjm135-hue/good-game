@@ -19,8 +19,7 @@ st.markdown("""
 | **슛 던지기** | **마우스 왼쪽 버튼 (길게 누를수록 파워 증가)** |
 """)
 
-game_1st_person_html = """
-<!DOCTYPE html>
+game_1st_person_html = """<!DOCTYPE html>
 <html>
 <head>
     <style>
@@ -47,18 +46,16 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a2e);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight * 0.8), 0.1, 1000);
-camera.position.set(0, 2, 8); // 카메라이자 플레이어의 위치
+camera.position.set(0, 2, 8);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth * 0.95, window.innerHeight * 0.75);
 renderer.shadowMap.enabled = true;
 container.appendChild(renderer.domElement);
 
-// 포인터 락 조작 (1인칭 시점)
 const controls = new THREE.PointerLockControls(camera, renderer.domElement);
 container.addEventListener('click', () => { controls.lock(); });
 
-// 조명
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -66,15 +63,13 @@ dirLight.position.set(10, 30, 20);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
-// 코트
 const courtGeo = new THREE.BoxGeometry(20, 0.2, 30);
 const courtMat = new THREE.MeshStandardMaterial({ color: 0xd35400 });
 const court = new THREE.Mesh(courtGeo, courtMat);
 court.position.y = 0;
 scene.add(court);
 
-// 골대 생성
-const rimPos = new THREE.Vector3(0, 3.05, -12); // 표준 골대 높이/위치
+const rimPos = new THREE.Vector3(0, 3.05, -12);
 const poleGeo = new THREE.CylinderGeometry(0.1, 0.1, 4);
 const poleMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
 const pole = new THREE.Mesh(poleGeo, poleMat);
@@ -94,64 +89,4 @@ rim.rotation.x = Math.PI / 2;
 rim.position.copy(rimPos);
 scene.add(rim);
 
-// 공 객체들
-const ballGeo = new THREE.SphereGeometry(0.24, 16, 16);
-const ballMat = new THREE.MeshStandardMaterial({ color: 0xe67e22 });
-
-let activeBalls = [];
-let score = 0;
-
-// 조작 키
-let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-let velocity = new THREE.Vector3();
-let canJump = true;
-
-window.addEventListener('keydown', (e) => {
-    switch (e.code) {
-        case 'KeyW': moveForward = true; break;
-        case 'KeyS': moveBackward = true; break;
-        case 'KeyA': moveLeft = true; break;
-        case 'KeyD': moveRight = true; break;
-        case 'Space': if (canJump) velocity.y += 0.15; canJump = false; break;
-    }
-});
-
-window.addEventListener('keyup', (e) => {
-    switch (e.code) {
-        case 'KeyW': moveForward = false; break;
-        case 'KeyS': moveBackward = false; break;
-        case 'KeyA': moveLeft = false; break;
-        case 'KeyD': moveRight = false; break;
-    }
-});
-
-// 슛 게이지
-let isCharging = false;
-let chargePower = 0;
-const powerBarContainer = document.getElementById('power-bar-container');
-const powerBar = document.getElementById('power-bar');
-
-window.addEventListener('mousedown', (e) => {
-    if (controls.isLocked && e.button === 0) {
-        isCharging = true;
-        chargePower = 0;
-        powerBarContainer.style.display = 'block';
-    }
-});
-
-window.addEventListener('mouseup', (e) => {
-    if (controls.isLocked && isCharging && e.button === 0) {
-        shootBall(chargePower);
-        isCharging = false;
-        powerBarContainer.style.display = 'none';
-    }
-});
-
-function shootBall(power) {
-    const ballMesh = new THREE.Mesh(ballGeo, ballMat);
-    
-    // 시점 바로 앞에서 발사
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    
-    ballMesh.position.copy(camera.position
+const ballGeo = new THREE.SphereGeometry(0.2
