@@ -89,4 +89,133 @@ rim.rotation.x = Math.PI / 2;
 rim.position.copy(rimPos);
 scene.add(rim);
 
-const ballGeo = new THREE.SphereGeometry(0.2
+const ballGeo = new THREE.SphereGeometry(0.24, 16, 16);
+const ballMat = new THREE.MeshStandardMaterial({ color: 0xe67e22 });
+
+let activeBalls = [];
+let score = 0;
+
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+let velocity = new THREE.Vector3();
+let canJump = true;
+
+window.addEventListener('keydown', (e) => {
+    switch (e.code) {
+        case 'KeyW': moveForward = true; break;
+        case 'KeyS': moveBackward = true; break;
+        case 'KeyA': moveLeft = true; break;
+        case 'KeyD': moveRight = true; break;
+        case 'Space': if (canJump) velocity.y += 0.15; canJump = false; break;
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    switch (e.code) {
+        case 'KeyW': moveForward = false; break;
+        case 'KeyS': moveBackward = false; break;
+        case 'KeyA': moveLeft = false; break;
+        case 'KeyD': moveRight = false; break;
+    }
+});
+
+let isCharging = false;
+let chargePower = 0;
+const powerBarContainer = document.getElementById('power-bar-container');
+const powerBar = document.getElementById('power-bar');
+
+window.addEventListener('mousedown', (e) => {
+    if (controls.isLocked && e.button === 0) {
+        isCharging = true;
+        chargePower = 0;
+        powerBarContainer.style.display = 'block';
+    }
+});
+
+window.addEventListener('mouseup', (e) => {
+    if (controls.isLocked && isCharging && e.button === 0) {
+        shootBall(chargePower);
+        isCharging = false;
+        powerBarContainer.style.display = 'none';
+    }
+});
+
+function shootBall(power) {
+    const ballMesh = new THREE.Mesh(ballGeo, ballMat);
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    
+    ballMesh.position.copy(camera.position).add(dir.clone().multiplyScalar(0.5));
+    scene.add(ballMesh);
+
+    const speed = 0.2 + (power / 100) * 0.3;
+    const ballVelocity = dir.clone().multiplyScalar(speed);
+    ballVelocity.y += 0.08 + (power / 100) * 0.05;
+
+    activeBalls.push({
+        mesh: ballMesh,
+        vel: ballVelocity,
+        isScored: false
+    });
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (isCharging) {
+        chargePower = Math.min(100, chargePower + 2);
+        powerBar.style.width = chargePower + '%';
+    }
+
+    if (controls.isLocked) {
+        velocity.x -= velocity.x * 0.1;
+        velocity.z -= velocity.z * 0.1;
+        velocity.y -= 0.008;
+
+        if (moveForward) velocity.z += 0.015;
+        if (moveBackward) velocity.z -= 0.015;
+        if (moveLeft) velocity.x -= 0.015;
+        if (moveRight) velocity.x += 0.015;
+
+        controls.moveRight(velocity.x);
+        controls.moveForward(velocity.z);
+        camera.position.y += velocity.y;
+
+        if (camera.position.y < 1.8) {
+            velocity.y = 0;
+            camera.position.y = 1.8;
+            canJump = true;
+        }
+    }
+
+    for (let i = activeBalls.length - 1; i >= 0; i--) {
+        const b = activeBalls[i];
+        b.vel.y -= 0.006;
+        b.mesh.position.add(b.vel);
+
+        if (b.mesh.position.y < 0.24) {
+            b.mesh.position.y = 0.24;
+            b.vel.y *= -0.5;
+        }
+
+        const distToRim = b.mesh.position.distanceTo(rimPos);
+        if (distToRim < 0.5 && b.vel.y < 0 && !b.isScored) {
+            score++;
+            document.getElementById('score').innerText = score;
+            b.isScored = true;
+        }
+
+        if (b.mesh.position.z < -20 || b.mesh.position.y < 0) {
+            scene.remove(b.mesh);
+            activeBalls.splice(i, 1);
+        }
+    }
+
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>"""
+
+components.html(game_1st_person_html, height=550)
