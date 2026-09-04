@@ -2,21 +2,21 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="🏀 Real Rule 2P Basketball with Block & Animations",
+    page_title="🏀 Fixed 2P Full Court Basketball",
     page_icon="🏀",
     layout="wide"
 )
 
-st.title("🏀 Real Rule 2P Full Court Basketball")
+st.title("🏀 Fixed 2P Full Court Basketball")
 
 st.markdown("""
-### 🎮 실제 농구 규칙 & 애니메이션 적용
-* **🛡️ 완벽한 블락 시스템**: 수비수가 슛/덩크 타이밍에 블락(`Space` / `Enter`)하면 공이 튕겨나가며 **득점이 완전히 불인정**됩니다!
-* **🏀 단일 공 & 소유권**: 블락되거나 튀어 나간 공은 바닥에 떨어지며, 공에 먼저 닿는 플레이어가 공을 빼앗습니다.
-* **🏃 동작 애니메이션**: 달리기, 슛(체중 이동 & 팔 뻗기), 슬로우 모션 덩크, 블락 포즈 모션이 모두 구체화되었습니다.
+### 🎮 수정된 조작법 및 규칙
+* **🎯 1P (Kobe #24)**: `A`/`D` (이동), `W` (점프), **`F` 키 (슛 모으기 ➔ 떼면 발사)**, **`Space` (블락)** | **목표: 오른쪽 골대**
+* **🎯 2P (Jordan #23)**: `←`/`→` (이동), `↑` (점프), **`L` 키 (슛 모으기 ➔ 떼면 발사)**, **`Enter` (블락)** | **목표: 왼쪽 골대**
+* **🚫 자책골 방지**: 자기 골대에 공을 넣으면 득점으로 인정되지 않습니다!
 """)
 
-game_real_rule_html = """<!DOCTYPE html>
+game_fixed_html = """<!DOCTYPE html>
 <html>
 <head>
     <style>
@@ -43,7 +43,7 @@ game_real_rule_html = """<!DOCTYPE html>
             <div style="font-size:18px; color:#aaa;">REAL RULE 1-ON-1</div>
             <div>2P (JORDAN): <span id="score2" style="color:#e74c3c;">0</span></div>
         </div>
-        <div id="green-splash">BLOCKED! NO GOAL! 🛡️</div>
+        <div id="green-splash">GOAL! 🔥</div>
         <canvas id="gameCanvas" width="1100" height="500"></canvas>
     </div>
 
@@ -79,20 +79,19 @@ const score2El = document.getElementById('score2');
 let score1 = 0;
 let score2 = 0;
 
-// 양쪽 골대
 const hoops = {
-    left: { x: 80, y: 190, rimX: 115, rimY: 220, rimR: 16 },
-    right: { x: 1020, y: 190, rimX: 985, rimY: 220, rimR: 16 }
+    left: { x: 80, y: 190, rimX: 115, rimY: 220, rimR: 18 },
+    right: { x: 1020, y: 190, rimX: 985, rimY: 220, rimR: 18 }
 };
 
-// 단일 공 (Single Ball Physics)
 const ball = {
     x: 200,
     y: 390,
     vx: 0,
     vy: 0,
     r: 10,
-    holder: 1, // 1: 1P, 2: 2P, null: 공중/바닥
+    holder: 1, // 1: 1P, 2: 2P, null: 공중
+    shooterId: null, // 공을 쏜 사람 ID
     isFlying: false,
     isGreen: false,
     isScored: false,
@@ -122,7 +121,7 @@ function createPlayer(id, x, color1, color2, number, targetHoopKey) {
         isMoving: false,
         isBlocking: false,
         blockCooldown: 0,
-        shootAnimTimer: 0 // 슛 모션 후폭풍 연출
+        shootAnimTimer: 0
     };
 }
 
@@ -140,9 +139,16 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') keys['enter'] = true;
     if (e.code === 'Space') keys['space'] = true;
 
-    if (k === 'f' && ball.holder === 1) handleShootOrDunkPress(p1);
-    if (k === 'l' && ball.holder === 2) handleShootOrDunkPress(p2);
+    // 1P 슛/덩크 누름
+    if (k === 'f' && ball.holder === 1 && !p1.isCharging && !p1.isDunking) {
+        handleShootOrDunkPress(p1);
+    }
+    // 2P 슛/덩크 누름
+    if (k === 'l' && ball.holder === 2 && !p2.isCharging && !p2.isDunking) {
+        handleShootOrDunkPress(p2);
+    }
 
+    // 블락
     if (e.code === 'Space' && ball.holder === 2) triggerBlock(p1, p2);
     if (e.key === 'Enter' && ball.holder === 1) triggerBlock(p2, p1);
 });
@@ -156,11 +162,11 @@ window.addEventListener('keyup', (e) => {
     if (e.key === 'Enter') keys['enter'] = false;
     if (e.code === 'Space') keys['space'] = false;
 
-    if (k === 'f' && ball.holder === 1) releaseShoot(p1);
-    if (k === 'l' && ball.holder === 2) releaseShoot(p2);
+    // 키를 뗬을 때 슛 발사
+    if (k === 'f' && p1.isCharging) releaseShoot(p1);
+    if (k === 'l' && p2.isCharging) releaseShoot(p2);
 });
 
-// 블락 시스템 (실제 농구 규칙 적용: 공이 튕겨나가며 득점 미인정)
 function triggerBlock(defender, attacker) {
     if (defender.blockCooldown > 0) return;
 
@@ -171,18 +177,16 @@ function triggerBlock(defender, attacker) {
     const dist = Math.hypot(defender.x - attacker.x, defender.y - attacker.y);
 
     if (dist < 65 && (attacker.isCharging || attacker.isDunking || attacker.isJumping || ball.holder === attacker.id)) {
-        triggerSplash("REJECTED! BLOCKED! 🛡️ (NO GOAL)");
+        triggerSplash("REJECTED! BLOCKED! 🛡️");
         playSound('block');
 
-        // 공격 및 덩크 상태 즉시 해제 (득점 취소)
         attacker.isCharging = false;
         attacker.isDunking = false;
-        attacker.dunkScored = true; // 덩크 득점 방지 플래그
+        attacker.dunkScored = true;
 
-        // 공 떨어뜨리기 (바닥으로 튕김)
         ball.holder = null;
         ball.isFlying = true;
-        ball.isScored = true; // 불인정 처리
+        ball.isScored = true; // 노골 처리
         ball.vx = (defender.x < attacker.x) ? -7 : 7;
         ball.vy = -6;
     }
@@ -198,7 +202,7 @@ function handleShootOrDunkPress(p) {
         p.dunkScored = false;
         p.isJumping = true;
         p.isCharging = false;
-    } else if (!p.isCharging && !p.isDunking) {
+    } else {
         p.isCharging = true;
         p.power = 0;
     }
@@ -208,7 +212,7 @@ function releaseShoot(p) {
     if (p.isCharging && !p.isDunking) {
         shootBall(p);
         p.isCharging = false;
-        p.shootAnimTimer = 15; // 슛 한 직후 팔 뻗는 모션
+        p.shootAnimTimer = 15;
     }
 }
 
@@ -220,6 +224,7 @@ function triggerSplash(text) {
 
 function shootBall(p) {
     ball.holder = null;
+    ball.shooterId = p.id;
     ball.isFlying = true;
     ball.isScored = false;
     ball.targetHoop = p.targetHoopKey;
@@ -247,16 +252,15 @@ function shootBall(p) {
     ball.isGreen = isGreen;
 }
 
-// 득점 후 실점팀에게 공 주어짐
 function resetAfterScore(scoredPlayerId) {
     p1.isDunking = false; p2.isDunking = false;
     p1.isCharging = false; p2.isCharging = false;
 
-    if (scoredPlayerId === 1) { // 1P 득점 -> 2P 실점 후 인바운드
+    if (scoredPlayerId === 1) {
         p1.x = 800; p1.y = 375;
         p2.x = 180; p2.y = 375;
         ball.holder = 2;
-    } else { // 2P 득점 -> 1P 실점 후 인바운드
+    } else {
         p1.x = 920; p1.y = 375;
         p2.x = 300; p2.y = 375;
         ball.holder = 1;
@@ -316,19 +320,22 @@ function updatePlayer(p, leftKey, rightKey, jumpKey) {
     }
 
     if (p.isMoving || p.isJumping) p.animFrame += 0.25;
-    if (p.isCharging) p.power = Math.min(100, p.power + 2.3);
+    
+    // 슛 키 모으는 로직
+    if (p.isCharging) {
+        p.power = Math.min(100, p.power + 2.3);
+    }
 }
 
 function update() {
     updatePlayer(p1, 'a', 'd', 'w');
     updatePlayer(p2, 'arrowleft', 'arrowright', 'arrowup');
 
-    // 공 물리 및 루즈볼 잡기
     if (ball.holder === 1) {
-        ball.x = p1.x + (p1.targetHoopKey === 'right' ? 28 : -8);
+        ball.x = p1.x + 28;
         ball.y = p1.y + 12;
     } else if (ball.holder === 2) {
-        ball.x = p2.x + (p2.targetHoopKey === 'left' ? -8 : 28);
+        ball.x = p2.x - 8;
         ball.y = p2.y + 12;
     } else if (ball.isFlying) {
         ball.x += ball.vx;
@@ -341,32 +348,43 @@ function update() {
             ball.vx *= 0.8;
         }
 
-        // 떨어진 공 다시 줍기
+        // 공 줍기
         const d1 = Math.hypot(ball.x - (p1.x + 18), ball.y - p1.y);
         const d2 = Math.hypot(ball.x - (p2.x + 18), ball.y - p2.y);
         if (d1 < 38) { ball.holder = 1; ball.isFlying = false; }
         else if (d2 < 38) { ball.holder = 2; ball.isFlying = false; }
 
-        // 링 통과 (득점)
-        const hoop = hoops[ball.targetHoop];
-        const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
+        // 링 검사 및 자책골 방지 시스템
+        ['left', 'right'].forEach(key => {
+            const hoop = hoops[key];
+            const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
 
-        if (distToRim < hoop.rimR && ball.vy > 0 && !ball.isScored) {
-            ball.isScored = true;
-            const scorerId = (ball.targetHoop === 'right') ? 1 : 2;
-            if (scorerId === 1) score1 += 2; else score2 += 2;
-            score1El.innerText = score1;
-            score2El.innerText = score2;
+            if (distToRim < hoop.rimR && ball.vy > 0 && !ball.isScored) {
+                // 자책골 검사: 1P는 오른쪽, 2P는 왼쪽 골대일 때만 인정
+                const isValidGoal = (ball.shooterId === 1 && key === 'right') || (ball.shooterId === 2 && key === 'left');
 
-            triggerSplash(ball.isGreen ? "PERFECT GREEN RELEASE! 🔥" : "SWISH! GOAL! 🔥");
-            playSound('swish');
+                if (isValidGoal) {
+                    ball.isScored = true;
+                    if (ball.shooterId === 1) score1 += 2; else score2 += 2;
+                    score1El.innerText = score1;
+                    score2El.innerText = score2;
 
-            setTimeout(() => resetAfterScore(scorerId), 800);
-        }
+                    triggerSplash(ball.isGreen ? "PERFECT GREEN RELEASE! 🔥" : "SWISH! GOAL! 🔥");
+                    playSound('swish');
+
+                    setTimeout(() => resetAfterScore(ball.shooterId), 800);
+                } else {
+                    // 자책골일 경우 노골 처리 후 공 튕겨 나감
+                    ball.isScored = true;
+                    ball.vx *= -0.5;
+                    ball.vy = 3;
+                    triggerSplash("OWN GOAL DISALLOWED! ❌");
+                }
+            }
+        });
     }
 }
 
-// 애니메이션이 강화된 플레이어 그리기
 function drawPlayer(p) {
     const runBounce = p.isMoving ? Math.sin(p.animFrame * 2) * 3 : 0;
     const legAngle = Math.sin(p.animFrame) * 18;
@@ -374,7 +392,7 @@ function drawPlayer(p) {
 
     const bodyY = p.y + runBounce;
 
-    // 1. 다리 걷기/뛰기 애니메이션
+    // 다리
     ctx.fillStyle = '#3d2314';
     ctx.save();
     ctx.translate(p.x + 9, bodyY + 34);
@@ -391,7 +409,7 @@ function drawPlayer(p) {
     ctx.fillStyle = '#fff'; ctx.fillRect(-4, 9, 8, 4);
     ctx.restore();
 
-    // 2. 몸통 (유니폼)
+    // 몸통
     ctx.fillStyle = p.color1;
     ctx.fillRect(p.x, bodyY, p.w, 24);
     ctx.fillStyle = p.color2;
@@ -401,22 +419,22 @@ function drawPlayer(p) {
     ctx.font = 'bold 12px Impact';
     ctx.fillText(p.number, p.x + 11, bodyY + 17);
 
-    // 3. 팔 & 슛/덩크/블락 모션 애니메이션
+    // 팔
     ctx.fillStyle = '#3d2314';
 
-    if (p.isBlocking) { // 블락 모션 (양손 하늘로)
+    if (p.isBlocking) {
         ctx.fillRect(p.x - 4, bodyY - 16, 6, 22);
         ctx.fillRect(p.x + 34, bodyY - 16, 6, 22);
-    } else if (p.isDunking) { // 덩크 모션 (한 손 위로 강하게)
+    } else if (p.isDunking) {
         const dunkDir = p.targetHoopKey === 'right' ? 32 : -6;
         ctx.fillRect(p.x + dunkDir, bodyY - 18, 7, 22);
-    } else if (p.isCharging) { // 슛 모으는 모션 (팔을 뒤로 젖힘)
+    } else if (p.isCharging) {
         ctx.fillRect(p.x + 6, bodyY - 10, 6, 16);
         ctx.fillRect(p.x + 24, bodyY - 10, 6, 16);
-    } else if (p.shootAnimTimer > 0) { // 슛 쏜 직후 팔 뻗는 모션 (Follow-through)
+    } else if (p.shootAnimTimer > 0) {
         const shootDir = p.targetHoopKey === 'right' ? 34 : -8;
         ctx.fillRect(p.x + shootDir, bodyY - 15, 6, 20);
-    } else { // 기본 런 애니메이션
+    } else {
         ctx.save();
         ctx.translate(p.x - 2, bodyY + 8);
         ctx.rotate((p.isMoving ? -armAngle : 0) * Math.PI / 180);
@@ -430,13 +448,13 @@ function drawPlayer(p) {
         ctx.restore();
     }
 
-    // 4. 머리
+    // 머리
     ctx.fillStyle = '#3d2314';
     ctx.beginPath();
     ctx.arc(p.x + 18, bodyY - 14, 18, 0, Math.PI * 2);
     ctx.fill();
 
-    // 5. 슛 게이지 HUD
+    // 슛 게이지 HUD
     if (p.isCharging) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(p.x - 8, bodyY - 58, 52, 11);
@@ -467,7 +485,7 @@ function draw() {
     ctx.arc(550, 415, 70, Math.PI, 2 * Math.PI);
     ctx.stroke();
 
-    // 양쪽 백보드 및 림
+    // 양쪽 골대
     ['left', 'right'].forEach(key => {
         const h = hoops[key];
         const isLeft = key === 'left';
@@ -476,7 +494,7 @@ function draw() {
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillRect(isLeft ? 70 : 1010, 140, 10, 100);
         ctx.strokeStyle = '#ce1141';
-        ctx.strokeRect(isLeft ? 72 : 1012, 170, 6, 40);
+        ctx.strokeRect(isLeft ? 72 : 1012, 6, 40);
         ctx.strokeStyle = '#e67e22';
         ctx.lineWidth = 5;
         ctx.beginPath();
@@ -508,4 +526,4 @@ gameLoop();
 </body>
 </html>"""
 
-components.html(game_real_rule_html, height=580)
+components.html(game_fixed_html, height=580)
