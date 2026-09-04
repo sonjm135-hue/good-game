@@ -2,49 +2,51 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="🏀 2D Classic Basketball Game",
+    page_title="🏀 Kobe 2D Dunk & Green Basketball",
     page_icon="🏀",
     layout="wide"
 )
 
-st.title("🏀 2D 클래식 아케이드 농구 게임")
+st.title("🏀 Kobe 2D Dunk & Green Basketball Edition")
 
 st.markdown("""
-### 🎮 2D 게임 조작법
+### 🎮 게임 조작법
 * **이동 (Move)**: `A` (왼쪽), `D` (오른쪽)
 * **점프 (Jump)**: `W` 또는 `Space`
-* **슛 (Shoot)**: **`F` 키 또는 마우스 클릭**
-  * 누르고 있으면 슛 파워 게이지가 상승하며, 초록색 구간에서 떼면 클린 슛과 함께 **Green Giant 사운드**가 출력됩니다!
+* **점프 슛 / 세트 슛**: **`F` 키 또는 마우스 클릭**
+  * 초록색 영역(70%~88%)에서 떼면 **어디서 쏘든 100% 무조건 득점!**
+* **🔥 덩크 (Dunk)**: **골대 근처(페인트 존)로 전진하면서 `F` 키를 빠르게 누르면 덩크 발동!**
+* **🔊 득점 사운드**: 득점 시 **"Ho Ho Ho Green Giant!"** 음성이 출력됩니다!
 """)
 
-game_2d_html = """<!DOCTYPE html>
+game_kobe_2d_html = """<!DOCTYPE html>
 <html>
 <head>
     <style>
         body { margin: 0; padding: 0; background-color: #111; font-family: 'Impact', sans-serif; user-select: none; }
         #canvas-container { width: 100vw; height: 75vh; display: flex; justify-content: center; align-items: center; position: relative; }
-        canvas { background: #1a1a24; border: 4px solid #fff; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        canvas { background: #181822; border: 4px solid #fff; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
         
         #hud {
             position: absolute; top: 15px; left: 30px; color: #fff; font-size: 24px;
-            background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 5px; border-left: 5px solid #2ecc71;
+            background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 5px; border-left: 5px solid #f1c40f;
         }
         #green-splash {
-            position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
-            font-size: 40px; color: #2ecc71; text-shadow: 0 0 15px #2ecc71, 2px 2px #000;
-            opacity: 0; transition: opacity 0.2s; pointer-events: none;
+            position: absolute; top: 28%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 42px; color: #2ecc71; text-shadow: 0 0 20px #2ecc71, 2px 2px #000;
+            opacity: 0; transition: opacity 0.2s; pointer-events: none; text-align: center;
         }
     </style>
 </head>
 <body>
     <div id="canvas-container">
-        <div id="hud">SCORE: <span id="score" style="color:#2ecc71;">0</span> | FGM: <span id="fgm">0</span></div>
+        <div id="hud">KOBE #24 | PTS: <span id="score" style="color:#2ecc71;">0</span> | FGM: <span id="fgm">0</span></div>
         <div id="green-splash">HO HO HO! GREEN GIANT! 🔥</div>
         <canvas id="gameCanvas" width="900" height="500"></canvas>
     </div>
 
 <script>
-// Sound System
+// Green Giant Sound System
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playGreenGiantSound() {
     const audio = new Audio('https://www.soundboard.com/handler/gettrack.ashx?id=516543');
@@ -70,23 +72,26 @@ const fgmEl = document.getElementById('fgm');
 let score = 0;
 let fgm = 0;
 
-// Game Entities
+// 플레이어 (Kobe Bryant 2D 설정)
 const player = {
     x: 180,
     y: 360,
-    w: 30,
+    w: 32,
     h: 60,
     vx: 0,
     vy: 0,
-    isJumping: false
+    isJumping: false,
+    isDunking: false,
+    dunkProgress: 0
 };
 
+// 골대 및 림 설정
 const hoop = {
     x: 750,
-    y: 200,
-    rimX: 720,
-    rimY: 230,
-    rimR: 15
+    y: 190,
+    rimX: 715,
+    rimY: 220,
+    rimR: 16
 };
 
 let balls = [];
@@ -101,7 +106,7 @@ window.addEventListener('keydown', (e) => {
     if (k === 'd') keys.d = true;
     if (k === 'w') keys.w = true;
     if (e.code === 'Space') keys.space = true;
-    if (k === 'f') startCharging();
+    if (k === 'f') handleShootOrDunkPress();
 });
 
 window.addEventListener('keyup', (e) => {
@@ -113,38 +118,60 @@ window.addEventListener('keyup', (e) => {
     if (k === 'f') releaseShoot();
 });
 
-canvas.addEventListener('mousedown', startCharging);
+canvas.addEventListener('mousedown', handleShootOrDunkPress);
 canvas.addEventListener('mouseup', releaseShoot);
 
-function startCharging() {
-    if (!isCharging) {
+function handleShootOrDunkPress() {
+    // 덩크 조건: 골대 근처(x > 500)에서 이동 중
+    if (player.x > 500 && (keys.d || keys.a || player.isJumping) && !player.isDunking) {
+        startDunk();
+    } else if (!isCharging && !player.isDunking) {
         isCharging = true;
         power = 0;
     }
 }
 
+function startDunk() {
+    player.isDunking = true;
+    player.dunkProgress = 0;
+    player.isJumping = true;
+    isCharging = false;
+}
+
 function releaseShoot() {
-    if (isCharging) {
+    if (isCharging && !player.isDunking) {
         shootBall(power);
         isCharging = false;
     }
 }
 
-function triggerGreenSplash() {
+function triggerGreenSplash(text = "HO HO HO! GREEN GIANT! 🔥") {
+    greenSplash.innerText = text;
     greenSplash.style.opacity = '1';
     setTimeout(() => { greenSplash.style.opacity = '0'; }, 1300);
 }
 
 function shootBall(p) {
-    let isPerfect = false;
-    let vx = 8 + (p / 100) * 8;
-    let vy = -9 - (p / 100) * 5;
+    let isGreen = false;
+    let vx, vy;
 
-    // Green Release 타이밍 (70% ~ 88%)
+    // 초록색 게이지 (70% ~ 88%): 무조건 100% 득점 궤적 자동 계산
     if (p >= 70 && p <= 88) {
-        isPerfect = true;
-        vx = 10.2;
-        vy = -12.5;
+        isGreen = true;
+        const startX = player.x + 20;
+        const startY = player.y;
+        const targetX = hoop.rimX;
+        const targetY = hoop.rimY;
+
+        // 물리 곡선 역산
+        const gravity = 0.42;
+        const time = 38; // 프레임
+        vx = (targetX - startX) / time;
+        vy = (targetY - startY - 0.5 * gravity * time * time) / time;
+    } else {
+        // 일반/미스 슛
+        vx = 7 + (p / 100) * 8;
+        vy = -8 - (p / 100) * 5;
     }
 
     balls.push({
@@ -153,43 +180,81 @@ function shootBall(p) {
         vx: vx,
         vy: vy,
         r: 10,
-        isPerfect: isPerfect,
+        isGreen: isGreen,
         isScored: false
     });
 }
 
 function update() {
-    // 이동 물리
-    if (keys.a) player.x -= 4;
-    if (keys.d) player.x += 4;
-    if ((keys.w || keys.space) && !player.isJumping) {
-        player.vy = -11;
-        player.isJumping = true;
+    // 1. 덩크 애니메이션 처리
+    if (player.isDunking) {
+        player.dunkProgress += 0.04;
+        
+        // 공중 부양 후 림으로 이동
+        player.x = 520 + player.dunkProgress * (hoop.rimX - 540);
+        player.y = 360 - Math.sin(player.dunkProgress * Math.PI) * 160;
+
+        // 덩크 완성 시점 (림 착지 직전)
+        if (player.dunkProgress >= 0.85 && !player.dunkScored) {
+            score += 2;
+            fgm += 1;
+            scoreEl.innerText = score;
+            fgmEl.innerText = fgm;
+            player.dunkScored = true;
+
+            triggerGreenSplash("KOBE DUNK! GREEN GIANT! 🔥");
+            playGreenGiantSound();
+
+            // 튕겨나가는 공 연출
+            balls.push({
+                x: hoop.rimX,
+                y: hoop.rimY + 10,
+                vx: 1,
+                vy: 6,
+                r: 10,
+                isGreen: true,
+                isScored: true
+            });
+        }
+
+        if (player.dunkProgress >= 1.0) {
+            player.isDunking = false;
+            player.dunkScored = false;
+            player.y = 360;
+            player.isJumping = false;
+        }
+    } else {
+        // 일반 이동 물리
+        if (keys.a) player.x -= 4;
+        if (keys.d) player.x += 4;
+        if ((keys.w || keys.space) && !player.isJumping) {
+            player.vy = -11;
+            player.isJumping = true;
+        }
+
+        player.y += player.vy;
+        player.vy += 0.55; // 중력
+
+        if (player.y >= 360) {
+            player.y = 360;
+            player.isJumping = false;
+        }
+
+        if (player.x < 30) player.x = 30;
+        if (player.x > 620) player.x = 620;
     }
 
-    player.y += player.vy;
-    player.vy += 0.55; // 중력
-
-    if (player.y >= 360) {
-        player.y = 360;
-        player.isJumping = false;
-    }
-
-    // 경계 제한
-    if (player.x < 30) player.x = 30;
-    if (player.x > 600) player.x = 600;
-
-    // 슛 게이지 충전
+    // 2. 슛 게이지 충전
     if (isCharging) {
-        power = Math.min(100, power + 2.2);
+        power = Math.min(100, power + 2.3);
     }
 
-    // 공 물리 업데이트
+    // 3. 농구공 물리 및 100% Green Light 판정
     for (let i = balls.length - 1; i >= 0; i--) {
         const b = balls[i];
         b.x += b.vx;
         b.y += b.vy;
-        b.vy += 0.42; // 중력
+        b.vy += 0.42;
 
         // 바닥 튕김
         if (b.y >= 410) {
@@ -197,8 +262,8 @@ function update() {
             b.vy *= -0.5;
         }
 
-        // 백보드 충돌
-        if (b.x >= hoop.x - 10 && b.x <= hoop.x + 10 && b.y >= hoop.y && b.y <= hoop.y + 90) {
+        // 일반 슛 백보드 반발 (Green Light가 아닐 때만)
+        if (!b.isGreen && b.x >= hoop.x - 10 && b.x <= hoop.x + 10 && b.y >= hoop.y && b.y <= hoop.y + 90) {
             b.vx *= -0.6;
             b.x = hoop.x - 12;
         }
@@ -212,11 +277,10 @@ function update() {
             fgmEl.innerText = fgm;
             b.isScored = true;
 
-            triggerGreenSplash();
+            triggerGreenSplash(b.isGreen ? "PERFECT GREEN RELEASE! 🔥" : "HO HO HO! GREEN GIANT! 🔥");
             playGreenGiantSound();
         }
 
-        // 제거
         if (b.x > 920 || b.y > 520) {
             balls.splice(i, 1);
         }
@@ -226,72 +290,99 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. 코트 바닥
+    // 1. 코트 바닥 & 3점선
     ctx.fillStyle = '#c85a17';
     ctx.fillRect(0, 420, 900, 80);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 418, 900, 4);
 
-    // 2D 3점선 및 페인트존
-    ctx.fillStyle = '#ce1141';
-    ctx.fillRect(620, 420, 280, 80);
-    ctx.strokeStyle = '#fff';
+    ctx.fillStyle = '#552583'; // Lakers Purple Paint
+    ctx.fillRect(600, 420, 300, 80);
+    ctx.strokeStyle = '#fdb927'; // Lakers Gold Line
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(750, 420, 220, Math.PI, 1.5 * Math.PI);
     ctx.stroke();
 
     // 2. 백보드 및 골대
-    // 기둥
-    ctx.fillStyle = '#333';
-    ctx.fillRect(770, 200, 12, 220);
-    // 백보드
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillRect(750, 150, 10, 100);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(770, 190, 12, 230);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(750, 140, 10, 100);
     ctx.strokeStyle = '#ce1141';
-    ctx.strokeRect(750, 180, 8, 40);
-    // 림
+    ctx.strokeRect(750, 170, 8, 40);
+    
+    // 림 (골대)
     ctx.strokeStyle = '#e67e22';
     ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(720, 230);
-    ctx.lineTo(750, 230);
+    ctx.moveTo(715, 220);
+    ctx.lineTo(750, 220);
     ctx.stroke();
 
-    // 3. 2D 캐릭터 플레이어
-    ctx.fillStyle = '#3498db';
-    ctx.fillRect(player.x, player.y, player.w, player.h); // 몸통
-    ctx.fillStyle = '#f1c40f';
+    // 3. 코비 브라이언트 캐릭터 그리기
+    // 유니폼 (Lakers #24 Yellow & Purple)
+    ctx.fillStyle = '#fdb927';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.fillStyle = '#552583';
+    ctx.fillRect(player.x, player.y + 35, player.w, 25);
+
+    // 피부 톤
+    ctx.fillStyle = '#3d2314';
     ctx.beginPath();
-    ctx.arc(player.x + 15, player.y - 12, 12, 0, Math.PI * 2); // 머리
+    ctx.arc(player.x + 16, player.y - 10, 13, 0, Math.PI * 2);
     ctx.fill();
 
-    // 플레이어가 잡고 있는 공
-    if (!isCharging) {
+    // 💇‍♂️ 코비 브라이언트 헤어 (짧은 아프로 도트 스타일)
+    ctx.fillStyle = '#0a0a0a';
+    ctx.beginPath();
+    ctx.arc(player.x + 16, player.y - 14, 14, Math.PI, 2 * Math.PI);
+    ctx.fill();
+    // 머리 질감 도트 표현
+    ctx.fillStyle = '#222';
+    ctx.fillRect(player.x + 6, player.y - 24, 6, 4);
+    ctx.fillRect(player.x + 15, player.y - 26, 6, 4);
+    ctx.fillRect(player.x + 22, player.y - 23, 5, 4);
+
+    // 등번호 24
+    ctx.fillStyle = '#552583';
+    ctx.font = 'bold 12px Impact';
+    ctx.fillText('24', player.x + 10, player.y + 22);
+
+    // 덩크 시 공 손에 고정
+    if (player.isDunking && player.dunkProgress < 0.85) {
         ctx.fillStyle = '#e67e22';
         ctx.beginPath();
-        ctx.arc(player.x + 25, player.y + 10, 10, 0, Math.PI * 2);
+        ctx.arc(player.x + 30, player.y - 10, 10, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (!isCharging && !player.isDunking) {
+        // 일반 평소 공
+        ctx.fillStyle = '#e67e22';
+        ctx.beginPath();
+        ctx.arc(player.x + 26, player.y + 12, 10, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // 4. 2D 슛 게이지 HUD
+    // 4. 초록색 슛 게이지 HUD
     if (isCharging) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(player.x - 10, player.y - 45, 50, 10);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(player.x - 10, player.y - 50, 52, 11);
         
-        // 초록색 Perfect Zone
+        // 초록색 무조건 득점 존 (70% ~ 88%)
         ctx.fillStyle = '#2ecc71';
-        ctx.fillRect(player.x + 25, player.y - 45, 9, 10);
+        ctx.fillRect(player.x + 26, player.y - 50, 9, 11);
 
-        // 현재 파워 채우기
-        ctx.fillStyle = (power >= 70 && power <= 88) ? '#2ecc71' : '#f39c12';
-        ctx.fillRect(player.x - 10, player.y - 45, (power / 100) * 50, 10);
+        // 게이지 채우기
+        const isGreenZone = power >= 70 && power <= 88;
+        ctx.fillStyle = isGreenZone ? '#2ecc71' : '#f39c12';
+        ctx.fillRect(player.x - 10, player.y - 50, (power / 100) * 52, 11);
+        
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
-        ctx.strokeRect(player.x - 10, player.y - 45, 50, 10);
+        ctx.strokeRect(player.x - 10, player.y - 50, 52, 11);
     }
 
-    // 5. 농구공들
+    // 5. 날아가는 농구공들
     for (let b of balls) {
         ctx.fillStyle = '#e67e22';
         ctx.beginPath();
@@ -314,4 +405,4 @@ gameLoop();
 </body>
 </html>"""
 
-components.html(game_2d_html, height=580)
+components.html(game_kobe_2d_html, height=580)
