@@ -2,21 +2,20 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="🏀 Fixed 2P Full Court Basketball",
+    page_title="🏀 Fixed 2P Basketball Game",
     page_icon="🏀",
     layout="wide"
 )
 
-st.title("🏀 Fixed 2P Full Court Basketball")
+st.title("🏀 Fixed 2P Basketball Game (선수 표시 & 슛 수정 완료)")
 
 st.markdown("""
-### 🎮 수정된 조작법 및 규칙
-* **🎯 1P (Kobe #24)**: `A`/`D` (이동), `W` (점프), **`F` 키 (슛 모으기 ➔ 떼면 발사)**, **`Space` (블락)** | **목표: 오른쪽 골대**
-* **🎯 2P (Jordan #23)**: `←`/`→` (이동), `↑` (점프), **`L` 키 (슛 모으기 ➔ 떼면 발사)**, **`Enter` (블락)** | **목표: 왼쪽 골대**
-* **🚫 자책골 방지**: 자기 골대에 공을 넣으면 득점으로 인정되지 않습니다!
+### 🎮 조작법 안내
+* **1P (Kobe #24)**: `A` / `D` (좌우 이동), `W` (점프), **`F` 키 (슛 모으기 ➔ 떼면 발사)**, **`Space` (블락)** | **오른쪽 골대**
+* **2P (Jordan #23)**: `←` / `→` (좌우 이동), `↑` (점프), **`L` 키 (슛 모으기 ➔ 떼면 발사)**, **`Enter` (블락)** | **왼쪽 골대**
 """)
 
-game_fixed_html = """<!DOCTYPE html>
+game_html = """<!DOCTYPE html>
 <html>
 <head>
     <style>
@@ -48,26 +47,27 @@ game_fixed_html = """<!DOCTYPE html>
     </div>
 
 <script>
-// Sound System
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playSound(type) {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
 
-    if (type === 'swish') {
-        osc.frequency.setValueAtTime(520, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-    } else if (type === 'block') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-    }
+        if (type === 'swish') {
+            osc.frequency.setValueAtTime(520, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        } else if (type === 'block') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        }
+    } catch(e) {}
 }
 
 const canvas = document.getElementById('gameCanvas');
@@ -91,7 +91,7 @@ const ball = {
     vy: 0,
     r: 10,
     holder: 1, // 1: 1P, 2: 2P, null: 공중
-    shooterId: null, // 공을 쏜 사람 ID
+    shooterId: null,
     isFlying: false,
     isGreen: false,
     isScored: false,
@@ -132,39 +132,32 @@ const keys = {};
 
 window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
+    const code = e.code;
     keys[k] = true;
-    if (e.key === 'ArrowLeft') keys['arrowleft'] = true;
-    if (e.key === 'ArrowRight') keys['arrowright'] = true;
-    if (e.key === 'ArrowUp') keys['arrowup'] = true;
-    if (e.key === 'Enter') keys['enter'] = true;
-    if (e.code === 'Space') keys['space'] = true;
+    keys[code] = true;
 
-    // 1P 슛/덩크 누름
-    if (k === 'f' && ball.holder === 1 && !p1.isCharging && !p1.isDunking) {
+    // 1P 슛/덩크
+    if ((k === 'f' || code === 'KeyF') && ball.holder === 1 && !p1.isCharging && !p1.isDunking) {
         handleShootOrDunkPress(p1);
     }
-    // 2P 슛/덩크 누름
-    if (k === 'l' && ball.holder === 2 && !p2.isCharging && !p2.isDunking) {
+    // 2P 슛/덩크
+    if ((k === 'l' || code === 'KeyL') && ball.holder === 2 && !p2.isCharging && !p2.isDunking) {
         handleShootOrDunkPress(p2);
     }
 
     // 블락
-    if (e.code === 'Space' && ball.holder === 2) triggerBlock(p1, p2);
-    if (e.key === 'Enter' && ball.holder === 1) triggerBlock(p2, p1);
+    if (code === 'Space' && ball.holder === 2) triggerBlock(p1, p2);
+    if ((code === 'Enter' || k === 'enter') && ball.holder === 1) triggerBlock(p2, p1);
 });
 
 window.addEventListener('keyup', (e) => {
     const k = e.key.toLowerCase();
+    const code = e.code;
     keys[k] = false;
-    if (e.key === 'ArrowLeft') keys['arrowleft'] = false;
-    if (e.key === 'ArrowRight') keys['arrowright'] = false;
-    if (e.key === 'ArrowUp') keys['arrowup'] = false;
-    if (e.key === 'Enter') keys['enter'] = false;
-    if (e.code === 'Space') keys['space'] = false;
+    keys[code] = false;
 
-    // 키를 뗬을 때 슛 발사
-    if (k === 'f' && p1.isCharging) releaseShoot(p1);
-    if (k === 'l' && p2.isCharging) releaseShoot(p2);
+    if ((k === 'f' || code === 'KeyF') && p1.isCharging) releaseShoot(p1);
+    if ((k === 'l' || code === 'KeyL') && p2.isCharging) releaseShoot(p2);
 });
 
 function triggerBlock(defender, attacker) {
@@ -186,7 +179,7 @@ function triggerBlock(defender, attacker) {
 
         ball.holder = null;
         ball.isFlying = true;
-        ball.isScored = true; // 노골 처리
+        ball.isScored = true;
         ball.vx = (defender.x < attacker.x) ? -7 : 7;
         ball.vy = -6;
     }
@@ -194,7 +187,7 @@ function triggerBlock(defender, attacker) {
 
 function handleShootOrDunkPress(p) {
     const targetRimX = hoops[p.targetHoopKey].rimX;
-    const isNearHoop = Math.abs(p.x - targetRimX) < 220;
+    const isNearHoop = Math.abs(p.x - targetRimX) < 200;
 
     if (isNearHoop && p.isMoving && !p.isDunking) {
         p.isDunking = true;
@@ -232,9 +225,9 @@ function shootBall(p) {
     const hoop = hoops[p.targetHoopKey];
     let isGreen = false;
 
-    if (p.power >= 70 && p.power <= 88) {
+    if (p.power >= 65 && p.power <= 90) {
         isGreen = true;
-        const startX = p.x + 20;
+        const startX = p.x + 18;
         const startY = p.y - 15;
         const targetX = hoop.rimX;
         const targetY = hoop.rimY;
@@ -245,7 +238,7 @@ function shootBall(p) {
         ball.vy = (targetY - startY - 0.5 * gravity * time * time) / time;
     } else {
         const dir = p.targetHoopKey === 'right' ? 1 : -1;
-        ball.vx = dir * (6 + (p.power / 100) * 8);
+        ball.vx = dir * (5 + (p.power / 100) * 8);
         ball.vy = -8 - (p.power / 100) * 4;
     }
 
@@ -269,14 +262,14 @@ function resetAfterScore(scoredPlayerId) {
     ball.vx = 0; ball.vy = 0;
 }
 
-function updatePlayer(p, leftKey, rightKey, jumpKey) {
+function updatePlayer(p, leftKey, rightKey, jumpKey, codeLeft, codeRight, codeJump) {
     p.isMoving = false;
     if (p.blockCooldown > 0) p.blockCooldown--;
     if (p.shootAnimTimer > 0) p.shootAnimTimer--;
 
     if (p.isDunking) {
         const hoop = hoops[p.targetHoopKey];
-        p.dunkProgress += 0.018;
+        p.dunkProgress += 0.02;
 
         const startX = p.targetHoopKey === 'right' ? hoop.rimX - 180 : hoop.rimX + 180;
         p.x = startX + p.dunkProgress * (hoop.rimX - startX);
@@ -288,7 +281,7 @@ function updatePlayer(p, leftKey, rightKey, jumpKey) {
             score1El.innerText = score1;
             score2El.innerText = score2;
 
-            triggerSplash(`${p.id === 1 ? 'KOBE' : 'JORDAN'} POWER DUNK! 🔥`);
+            triggerSplash(`${p.id === 1 ? 'KOBE' : 'JORDAN'} SLAM DUNK! 🔥`);
             playSound('swish');
 
             setTimeout(() => resetAfterScore(p.id), 800);
@@ -300,9 +293,9 @@ function updatePlayer(p, leftKey, rightKey, jumpKey) {
             p.isJumping = false;
         }
     } else {
-        if (keys[leftKey]) { p.x -= 4; p.isMoving = true; }
-        if (keys[rightKey]) { p.x += 4; p.isMoving = true; }
-        if (keys[jumpKey] && !p.isJumping) {
+        if (keys[leftKey] || keys[codeLeft]) { p.x -= 4; p.isMoving = true; }
+        if (keys[rightKey] || keys[codeRight]) { p.x += 4; p.isMoving = true; }
+        if ((keys[jumpKey] || keys[codeJump]) && !p.isJumping) {
             p.vy = -11;
             p.isJumping = true;
         }
@@ -320,16 +313,15 @@ function updatePlayer(p, leftKey, rightKey, jumpKey) {
     }
 
     if (p.isMoving || p.isJumping) p.animFrame += 0.25;
-    
-    // 슛 키 모으는 로직
+
     if (p.isCharging) {
-        p.power = Math.min(100, p.power + 2.3);
+        p.power = Math.min(100, p.power + 2.5);
     }
 }
 
 function update() {
-    updatePlayer(p1, 'a', 'd', 'w');
-    updatePlayer(p2, 'arrowleft', 'arrowright', 'arrowup');
+    updatePlayer(p1, 'a', 'd', 'w', 'KeyA', 'KeyD', 'KeyW');
+    updatePlayer(p2, 'arrowleft', 'arrowright', 'arrowup', 'ArrowLeft', 'ArrowRight', 'ArrowUp');
 
     if (ball.holder === 1) {
         ball.x = p1.x + 28;
@@ -354,13 +346,12 @@ function update() {
         if (d1 < 38) { ball.holder = 1; ball.isFlying = false; }
         else if (d2 < 38) { ball.holder = 2; ball.isFlying = false; }
 
-        // 링 검사 및 자책골 방지 시스템
+        // 골대 충돌 및 자책골 처리
         ['left', 'right'].forEach(key => {
             const hoop = hoops[key];
             const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
 
             if (distToRim < hoop.rimR && ball.vy > 0 && !ball.isScored) {
-                // 자책골 검사: 1P는 오른쪽, 2P는 왼쪽 골대일 때만 인정
                 const isValidGoal = (ball.shooterId === 1 && key === 'right') || (ball.shooterId === 2 && key === 'left');
 
                 if (isValidGoal) {
@@ -374,7 +365,6 @@ function update() {
 
                     setTimeout(() => resetAfterScore(ball.shooterId), 800);
                 } else {
-                    // 자책골일 경우 노골 처리 후 공 튕겨 나감
                     ball.isScored = true;
                     ball.vx *= -0.5;
                     ball.vy = 3;
@@ -459,8 +449,8 @@ function drawPlayer(p) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(p.x - 8, bodyY - 58, 52, 11);
         ctx.fillStyle = '#2ecc71';
-        ctx.fillRect(p.x + 28, bodyY - 58, 9, 11);
-        const isGreenZone = p.power >= 70 && p.power <= 88;
+        ctx.fillRect(p.x + 25, bodyY - 58, 12, 11);
+        const isGreenZone = p.power >= 65 && p.power <= 90;
         ctx.fillStyle = isGreenZone ? '#2ecc71' : '#f39c12';
         ctx.fillRect(p.x - 8, bodyY - 58, (p.power / 100) * 52, 11);
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
@@ -471,13 +461,13 @@ function drawPlayer(p) {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 풀코트
+    // 바닥
     ctx.fillStyle = '#c85a17';
     ctx.fillRect(0, 415, 1100, 85);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 413, 1100, 4);
 
-    // 센터 라인
+    // 중앙 선
     ctx.fillRect(548, 413, 4, 87);
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 3;
@@ -485,7 +475,7 @@ function draw() {
     ctx.arc(550, 415, 70, Math.PI, 2 * Math.PI);
     ctx.stroke();
 
-    // 양쪽 골대
+    // 골대
     ['left', 'right'].forEach(key => {
         const h = hoops[key];
         const isLeft = key === 'left';
@@ -494,7 +484,7 @@ function draw() {
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillRect(isLeft ? 70 : 1010, 140, 10, 100);
         ctx.strokeStyle = '#ce1141';
-        ctx.strokeRect(isLeft ? 72 : 1012, 6, 40);
+        ctx.strokeRect(isLeft ? 72 : 1012, 170, 6, 40);
         ctx.strokeStyle = '#e67e22';
         ctx.lineWidth = 5;
         ctx.beginPath();
@@ -506,7 +496,7 @@ function draw() {
     drawPlayer(p1);
     drawPlayer(p2);
 
-    // 농구공
+    // 공
     ctx.fillStyle = '#e67e22';
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
@@ -526,4 +516,4 @@ gameLoop();
 </body>
 </html>"""
 
-components.html(game_fixed_html, height=580)
+components.html(game_html, height=580)
