@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="폐가 탈출: 살인마의 집", layout="wide")
+st.set_page_config(page_title="Granny: 폐가의 살인마", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -9,39 +9,45 @@ game_html = """
 <head>
     <meta charset="UTF-8">
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; color: white; user-select: none; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; color: white; user-select: none; }
         #canvas-container { width: 100vw; height: 100vh; cursor: crosshair; }
         #ui-overlay {
             position: absolute; top: 15px; left: 15px;
-            color: #fff; text-shadow: 2px 2px 4px #000;
+            color: #ffcccc; text-shadow: 2px 2px 4px #000;
             pointer-events: none; font-size: 18px; z-index: 10;
         }
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: rgba(0,0,0,0.92); color: #fff; text-align: center; z-index: 20;
+            background: radial-gradient(circle, #220000 0%, #000000 90%); color: #fff; text-align: center; z-index: 20;
         }
         #start-btn {
-            margin-top: 20px; padding: 15px 40px; font-size: 24px; font-weight: bold;
-            color: #fff; background-color: #b71c1c; border: none; border-radius: 8px;
-            cursor: pointer; transition: 0.2s;
+            margin-top: 20px; padding: 15px 45px; font-size: 26px; font-weight: bold;
+            color: #fff; background-color: #8b0000; border: 2px solid #ff3333; border-radius: 4px;
+            cursor: pointer; transition: 0.2s; box-shadow: 0 0 15px #ff0000;
         }
-        #start-btn:hover { background-color: #ff1744; }
+        #start-btn:hover { background-color: #ff0000; box-shadow: 0 0 25px #ff0000; }
         #crosshair {
             position: absolute; top: 50%; left: 50%;
-            width: 8px; height: 8px; background: rgba(255,255,255,0.8);
+            width: 8px; height: 8px; background: rgba(255,0,0,0.7);
             border-radius: 50%; transform: translate(-50%, -50%);
-            pointer-events: none; z-index: 10;
+            pointer-events: none; z-index: 10; box-shadow: 0 0 5px red;
         }
         #jumpscare-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: red; display: none; justify-content: center; align-items: center;
-            flex-direction: column; z-index: 30; animation: flash 0.1s infinite;
+            background: #000; display: none; justify-content: center; align-items: center;
+            flex-direction: column; z-index: 30;
         }
-        @keyframes flash {
-            0% { background-color: #ff0000; }
-            50% { background-color: #000000; }
-            100% { background-color: #550000; }
+        #granny-face {
+            font-size: 120px; animation: shake 0.05s infinite; filter: drop-shadow(0 0 20px red);
+        }
+        @keyframes shake {
+            0% { transform: translate(2px, 2px) rotate(0deg); }
+            20% { transform: translate(-3px, 0px) rotate(3deg); }
+            40% { transform: translate(1px, -1px) rotate(-3deg); }
+            60% { transform: translate(-2px, 1px) rotate(0deg); }
+            80% { transform: translate(2px, 1px) rotate(2deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
         }
     </style>
 </head>
@@ -49,28 +55,29 @@ game_html = """
     <div id="canvas-container"></div>
     <div id="crosshair"></div>
     <div id="ui-overlay">
-        <div>🔦 손전등: <span id="flashlight-status" style="color: yellow;">ON (F)</span></div>
-        <div>📜 미션: <span id="game-status" style="color: #ff4444;">열쇠를 찾아 탈출하세요 (F키로 습득)</span></div>
+        <div>🩸 손전등: <span id="flashlight-status" style="color: #ff3333;">ON (F)</span></div>
+        <div>📜 상태: <span id="game-status" style="color: #ffaaaa;">열쇠를 찾아 탈출하세요 (F키로 상호작용)</span></div>
     </div>
     
     <div id="start-screen">
-        <h1 style="color: #ff3333; font-size: 45px; margin-bottom: 10px;">🏚️ 폐가 탈출: 살인마의 집</h1>
-        <p style="font-size: 18px; color: #ccc; max-width: 550px; line-height: 1.6;">
-            폐가를 탐방하던 중 출구 문이 쾅 닫히며 잠겼습니다.<br>
-            어둠 속에서 살인마가 당신을 쫓아옵니다!
+        <h1 style="color: #ff0000; font-size: 50px; margin-bottom: 5px; text-shadow: 0 0 10px red;">GRANNY: THE ESCAPE</h1>
+        <p style="font-size: 16px; color: #aaa; max-width: 550px; line-height: 1.6;">
+            기절 후 눈을 뜬 곳은 핏자국으로 가득한 기괴한 목조 저택입니다.<br>
+            살인마가 당신의 소리를 듣고 쫓아옵니다. 열쇠를 찾아 탈출하세요!
         </p>
-        <button id="start-btn">게임 시작하기</button>
-        <div style="margin-top: 25px; text-align: left; background: rgba(255,255,255,0.08); padding: 18px; border-radius: 8px; font-size: 15px;">
+        <button id="start-btn">저택 진입하기</button>
+        <div style="margin-top: 25px; text-align: left; background: rgba(50,0,0,0.5); border: 1px solid #550000; padding: 18px; border-radius: 8px; font-size: 14px;">
             <p style="margin: 5px 0;">🎮 <b>W, A, S, D</b> : 이동</p>
-            <p style="margin: 5px 0;">🖱️ <b>마우스 이동</b> : 화면 회전</p>
-            <p style="margin: 5px 0;">🔦 <b>F 키</b> : 손전등 ON/OFF & 열쇠 습득</p>
+            <p style="margin: 5px 0;">🖱️ <b>화면 드래그/마우스 이동</b> : 시점 전환</p>
+            <p style="margin: 5px 0;">🩸 <b>F 키</b> : 손전등 ON/OFF 및 열쇠 습득</p>
         </div>
     </div>
 
     <div id="jumpscare-overlay">
-        <h1 style="font-size: 70px; color: black; text-shadow: 0 0 20px white;">😱 으아악!</h1>
-        <h2 style="font-size: 35px; color: white;">살인마에게 잡혔습니다...</h2>
-        <p style="font-size: 20px; color: yellow; margin-top: 15px;">새로그물(F5)을 눌러 다시 도전하세요.</p>
+        <div id="granny-face">👵🩸</div>
+        <h1 style="font-size: 55px; color: red; text-shadow: 0 0 15px black; margin: 10px 0;">YOU DIED</h1>
+        <h2 style="font-size: 25px; color: white;">그래니에게 잡혔습니다...</h2>
+        <p style="font-size: 18px; color: yellow; margin-top: 20px;">F5 키를 눌러 다시 도전하세요.</p>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -87,8 +94,8 @@ game_html = """
         let gameOver = false;
         let gameClear = false;
 
-        let keyMesh, doorMesh, killerMesh;
-        let killerSpeed = 2.8;
+        let keyMesh, doorMesh, grannyMesh;
+        let grannySpeed = 3.2;
 
         const startScreen = document.getElementById('start-screen');
         const startBtn = document.getElementById('start-btn');
@@ -96,14 +103,15 @@ game_html = """
         const gameStatus = document.getElementById('game-status');
         const jumpscareOverlay = document.getElementById('jumpscare-overlay');
 
-        let mouseX = 0, mouseY = 0;
+        let isMouseDown = false;
+        let previousMousePosition = { x: 0, y: 0 };
 
         function init() {
             scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x000000, 0.18);
+            scene.fog = new THREE.FogExp2(0x050000, 0.16); // 피빛 안개 효과
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 8);
+            camera.position.set(0, 1.6, 9);
             camera.rotation.order = 'YXZ';
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -111,8 +119,8 @@ game_html = """
             renderer.shadowMap.enabled = true;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // 손전등
-            flashlight = new THREE.SpotLight(0xffffff, 4, 20, Math.PI / 5, 0.5, 1);
+            // 손전등 (노란 어두운 조명)
+            flashlight = new THREE.SpotLight(0xffccaa, 4, 18, Math.PI / 5, 0.5, 1);
             flashlight.castShadow = true;
             camera.add(flashlight);
             flashlight.position.set(0, 0, 0);
@@ -120,85 +128,128 @@ game_html = """
             camera.add(flashlight.target);
             scene.add(camera);
 
-            const ambient = new THREE.AmbientLight(0x050505);
+            const ambient = new THREE.AmbientLight(0x1a0505);
             scene.add(ambient);
 
-            // 바닥
-            const floorGeo = new THREE.PlaneGeometry(30, 30);
-            const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a110b, roughness: 0.9 });
+            // Granny 스타일 나무 바닥
+            const floorGeo = new THREE.PlaneGeometry(32, 32);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x2b1810, roughness: 0.8 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             floor.receiveShadow = true;
             scene.add(floor);
 
-            createHouse();
+            createGrannyHouse();
 
             // 황금 열쇠
             const keyGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
-            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x554400 });
+            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x664400 });
             keyMesh = new THREE.Mesh(keyGeo, keyMat);
-            keyMesh.position.set(10, 0.4, -10);
+            keyMesh.position.set(11, 0.4, -11);
             scene.add(keyMesh);
 
-            // 출구 문
-            const doorGeo = new THREE.BoxGeometry(2, 3.5, 0.2);
-            const doorMat = new THREE.MeshStandardMaterial({ color: 0x550000 });
+            // 탈출용 목조 문
+            const doorGeo = new THREE.BoxGeometry(2.2, 3.8, 0.2);
+            const doorMat = new THREE.MeshStandardMaterial({ color: 0x3d1f0d });
             doorMesh = new THREE.Mesh(doorGeo, doorMat);
-            doorMesh.position.set(0, 1.75, 14.8);
+            doorMesh.position.set(0, 1.9, 15.8);
             scene.add(doorMesh);
 
-            // 살인마
-            const killerGeo = new THREE.BoxGeometry(1, 2.2, 1);
-            const killerMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-            killerMesh = new THREE.Mesh(killerGeo, killerMat);
-            
-            const eyeGeo = new THREE.BoxGeometry(0.2, 0.1, 0.1);
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-            const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
-            const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
-            eye1.position.set(-0.25, 0.7, -0.5);
-            eye2.position.set(0.25, 0.7, -0.5);
-            killerMesh.add(eye1);
-            killerMesh.add(eye2);
-
-            killerMesh.position.set(-10, 1.1, -10);
-            scene.add(killerMesh);
+            // 그래니 (Granny) 모티브 몬스터 디자인
+            createGrannyMonster();
 
             // 이벤트 등록
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
 
-            // 시작 버튼 클릭
             startBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 startScreen.style.display = 'none';
                 gameStarted = true;
             });
 
-            // 마우스 이동 시 시점 회전 (PointerLock 제한 회피 방식)
+            // 마우스 드래그 및 이동으로 360도 자유 시점 전환
+            const canvasContainer = document.getElementById('canvas-container');
+            
+            canvasContainer.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+
+            document.addEventListener('mouseup', () => { isMouseDown = false; });
+
             document.addEventListener('mousemove', (e) => {
                 if (!gameStarted || gameOver) return;
-                
-                const movementX = e.movementX || 0;
-                const movementY = e.movementY || 0;
 
-                camera.rotation.y -= movementX * 0.003;
-                camera.rotation.x -= movementY * 0.003;
+                let deltaX = 0, deltaY = 0;
+
+                if (document.pointerLockElement === document.body) {
+                    deltaX = e.movementX;
+                    deltaY = e.movementY;
+                } else if (isMouseDown) {
+                    deltaX = e.clientX - previousMousePosition.x;
+                    deltaY = e.clientY - previousMousePosition.y;
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                }
+
+                camera.rotation.y -= deltaX * 0.003;
+                camera.rotation.x -= deltaY * 0.003;
                 camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, camera.rotation.x));
+            });
+
+            canvasContainer.addEventListener('click', () => {
+                if (gameStarted && !gameOver) {
+                    document.body.requestPointerLock = document.body.requestPointerLock || document.body.mozRequestPointerLock;
+                    if (document.body.requestPointerLock) document.body.requestPointerLock();
+                }
             });
 
             animate();
         }
 
-        function createHouse() {
-            const wallMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+        function createGrannyMonster() {
+            grannyMesh = new THREE.Group();
+
+            // 몸통 (핏빛 드레스)
+            const bodyGeo = new THREE.CylinderGeometry(0.4, 0.6, 2.0, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a3b32 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.0;
+            grannyMesh.add(body);
+
+            // 머리
+            const headGeo = new THREE.SphereGeometry(0.35, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x889977 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.1;
+            grannyMesh.add(head);
+
+            // 섬뜩한 붉은 눈
+            const eyeGeo = new THREE.SphereGeometry(0.08, 6, 6);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
+            const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
+            eye1.position.set(-0.12, 2.15, -0.3);
+            eye2.position.set(0.12, 2.15, -0.3);
+            grannyMesh.add(eye1);
+            grannyMesh.add(eye2);
+
+            grannyMesh.position.set(-11, 0, -11);
+            scene.add(grannyMesh);
+        }
+
+        function createGrannyHouse() {
+            // 피묻은 목조 벽면
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a2518, roughness: 0.9 });
+            const bloodMat = new THREE.MeshStandardMaterial({ color: 0x550000, roughness: 0.5 });
+
             const walls = [
-                [0, 2.5, -15, 30, 5, 0.5],
-                [0, 2.5, 15, 30, 5, 0.5],
-                [-15, 2.5, 0, 0.5, 5, 30],
-                [15, 2.5, 0, 0.5, 5, 30],
-                [-5, 2.5, 0, 10, 5, 0.5],
-                [5, 2.5, -5, 0.5, 5, 15]
+                [0, 2.5, -16, 32, 5, 0.5],
+                [0, 2.5, 16, 32, 5, 0.5],
+                [-16, 2.5, 0, 0.5, 5, 32],
+                [16, 2.5, 0, 0.5, 5, 32],
+                [-6, 2.5, -2, 12, 5, 0.5],
+                [6, 2.5, -6, 0.5, 5, 16]
             ];
 
             walls.forEach(w => {
@@ -207,6 +258,11 @@ game_html = """
                 wall.position.set(w[0], w[1], w[2]);
                 scene.add(wall);
             });
+
+            // 핏자국 디테일 표현
+            const bloodDecal = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), bloodMat);
+            bloodDecal.position.set(-5, 1.5, -15.7);
+            scene.add(bloodDecal);
         }
 
         function onKeyDown(e) {
@@ -236,7 +292,7 @@ game_html = """
             isFlashlightOn = !isFlashlightOn;
             flashlight.visible = isFlashlightOn;
             flashlightStatus.innerText = isFlashlightOn ? "ON (F)" : "OFF (F)";
-            flashlightStatus.style.color = isFlashlightOn ? "yellow" : "gray";
+            flashlightStatus.style.color = isFlashlightOn ? "#ff3333" : "gray";
 
             // 열쇠 습득
             if (!hasKey && keyMesh) {
@@ -245,7 +301,7 @@ game_html = """
                     hasKey = true;
                     scene.remove(keyMesh);
                     doorMesh.material.color.setHex(0x00ff00);
-                    gameStatus.innerText = "열쇠 습득 완료! 출구 문으로 탈출하세요!";
+                    gameStatus.innerText = "열쇠 습득! 탈출구 문으로 달아나세요!";
                     gameStatus.style.color = "#00ff00";
                 }
             }
@@ -253,6 +309,7 @@ game_html = """
 
         function triggerJumpscare() {
             gameOver = true;
+            if (document.exitPointerLock) document.exitPointerLock();
             jumpscareOverlay.style.display = 'flex';
         }
 
@@ -278,30 +335,34 @@ game_html = """
             camera.moveForward(-velocity.z * delta);
             camera.moveRight(velocity.x * delta);
 
-            camera.position.x = Math.max(-14, Math.min(14, camera.position.x));
-            camera.position.z = Math.max(-14, Math.min(14, camera.position.z));
+            camera.position.x = Math.max(-15, Math.min(15, camera.position.x));
+            camera.position.z = Math.max(-15, Math.min(15, camera.position.z));
 
-            // 살인마 AI 추적
-            const dirToPlayer = new THREE.Vector3().subVectors(camera.position, killerMesh.position);
+            // 그래니 추적 AI
+            const dirToPlayer = new THREE.Vector3().subVectors(camera.position, grannyMesh.position);
             dirToPlayer.y = 0;
             const distToPlayer = dirToPlayer.length();
 
             if (distToPlayer > 0.1) {
                 dirToPlayer.normalize();
-                killerMesh.position.addScaledVector(dirToPlayer, killerSpeed * delta);
-                killerMesh.lookAt(camera.position.x, killerMesh.position.y, camera.position.z);
+                grannyMesh.position.addScaledVector(dirToPlayer, grannySpeed * delta);
+                grannyMesh.lookAt(camera.position.x, grannyMesh.position.y, camera.position.z);
             }
 
-            // 갑툭튀
+            // 그래니 기괴한 요동 연출
+            grannyMesh.position.y = Math.sin(time * 0.01) * 0.1;
+
+            // 점프스케어 (그래니와 접촉 시)
             if (distToPlayer < 1.8) {
                 triggerJumpscare();
             }
 
-            // 탈출 성공
+            // 탈출
             const distDoor = camera.position.distanceTo(doorMesh.position);
             if (distDoor < 2.5 && hasKey) {
                 gameClear = true;
-                alert("🎉 폐가에서 성공적으로 탈출했습니다!");
+                if (document.exitPointerLock) document.exitPointerLock();
+                alert("🎉 그래니의 집에서 성공적으로 탈출했습니다!");
             }
 
             if (keyMesh) keyMesh.rotation.y += 0.02;
