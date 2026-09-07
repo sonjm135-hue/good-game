@@ -1,236 +1,221 @@
-import streamlit as st
-import streamlit.components.v1 as components
+import pygame
+from pygame.locals import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
+import math
+import random
+import sys
 
-st.set_page_config(page_title="3D 어둠 속의 탈출", layout="wide")
+# 게임 초기화
+pygame.init()
+WIDTH, HEIGHT = 1000, 750
+display = (WIDTH, HEIGHT)
+pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
+pygame.display.set_caption("폐가 탈출: 살인마의 집")
 
-game_html = """
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; color: white; }
-        #canvas-container { width: 100vw; height: 100vh; }
-        #ui-overlay {
-            position: absolute; top: 15px; left: 15px;
-            color: #fff; text-shadow: 2px 2px 4px #000;
-            pointer-events: none; font-size: 18px; z-index: 10;
-        }
-        #instructions {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: rgba(0,0,0,0.85); color: #fff; text-align: center;
-            cursor: pointer; z-index: 20;
-        }
-        #crosshair {
-            position: absolute; top: 50%; left: 50%;
-            width: 6px; height: 6px; background: rgba(255,255,255,0.8);
-            border-radius: 50%; transform: translate(-50%, -50%);
-            pointer-events: none; z-index: 10;
-        }
-    </style>
-</head>
-<body>
-    <div id="canvas-container"></div>
-    <div id="crosshair"></div>
-    <div id="ui-overlay">
-        <div>🔦 손전등: <span id="flashlight-status" style="color: yellow;">ON (F)</span></div>
-        <div>📜 미션: <span id="game-status" style="color: #ff4444;">열쇠를 찾으세요 (F키로 습득)</span></div>
-    </div>
-    <div id="instructions">
-        <h1 style="color: #ff3333; font-size: 40px; margin-bottom: 10px;">어둠 속의 탈출</h1>
-        <p style="font-size: 22px;"><b>[ 화면을 클릭하면 게임이 시작됩니다 ]</b></p>
-        <div style="margin-top: 20px; text-align: left; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px;">
-            <p>🎮 <b>W, A, S, D</b> : 이동</p>
-            <p>🖱️ <b>마우스</b> : 시점 회전</p>
-            <p>🔦 <b>F 키</b> : 손전등 켜기/끄기 & 아이템 습득</p>
-            <p>🚪 <b>ESC</b> : 마우스 해제</p>
-        </div>
-    </div>
+# 마우스 고정
+pygame.mouse.set_visible(False)
+pygame.event.set_grab(True)
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        let scene, camera, renderer, flashlight;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let prevTime = performance.now();
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
+# 카메라 / 플레이어 상태
+camera_pos = [0.0, 1.0, 5.0]
+camera_rot = [0.0, 0.0]  # pitch, yaw
+flashlight_on = True
+has_key = False
+game_over = False
+game_clear = False
+jumpscare_active = False
+jumpscare_timer = 0
 
-        let isFlashlightOn = true;
-        let hasKey = false;
-        let keyMesh;
+# 아이템 및 엔티티 위치
+KEY_POS = [10.0, 0.3, -12.0]
+DOOR_POS = [0.0, 1.5, 9.8]
+KILLER_POS = [12.0, 1.0, -14.0]
 
-        const instructions = document.getElementById('instructions');
-        const flashlightStatus = document.getElementById('flashlight-status');
-        const gameStatus = document.getElementById('game-status');
+# 텍스트 렌더링 함수
+def render_text(text, position):
+    font = pygame.font.SysFont('malgungothic', 28)
+    text_surface = font.render(text, True, (255, 255, 255), (0, 0, 0))
+    text_data = pygame.image.tostring(text_surface, "RGBA", True)
+    glWindowPos2d(*position)
+    glDrawPixels(text_surface.get_width(), text_surface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, text_data)
 
-        function init() {
-            scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x000000, 0.15);
+# 3D 큐브 그리기
+def draw_cube(pos, size, color):
+    x, y, z = pos
+    sx, sy, sz = size
+    glPushMatrix()
+    glTranslatef(x, y, z)
+    glColor3f(*color)
+    
+    vertices = [
+        [sx, sy, -sz], [sx, -sy, -sz], [-sx, -sy, -sz], [-sx, sy, -sz],
+        [sx, sy, sz], [sx, -sy, sz], [-sx, -sy, sz], [-sx, sy, sz]
+    ]
+    surfaces = [
+        (0,1,2,3), (4,5,6,7), (0,4,7,3),
+        (1,5,6,2), (0,1,5,4), (3,2,6,7)
+    ]
+    
+    glBegin(GL_QUADS)
+    for surface in surfaces:
+        for vertex in surface:
+            glVertex3fv(vertices[vertex])
+    glEnd()
+    glPopMatrix()
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 0);
+# 조명 설정 (손전등)
+def setup_lighting():
+    glEnable(GL_LIGHTING)
+    glEnable(GL_LIGHT0)
+    
+    if flashlight_on:
+        # 손전등 SpotLight 설정
+        light_pos = [camera_pos[0], camera_pos[1], camera_pos[2], 1.0]
+        
+        rad_yaw = math.radians(camera_rot[1])
+        rad_pitch = math.radians(camera_rot[0])
+        dir_x = math.sin(rad_yaw) * math.cos(rad_pitch)
+        dir_y = -math.sin(rad_pitch)
+        dir_z = -math.cos(rad_yaw) * math.cos(rad_pitch)
+        
+        glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
+        glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, [dir_x, dir_y, dir_z])
+        glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 25.0)  # 손전등 각도
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, [1.0, 0.9, 0.7, 1.0])
+    else:
+        # 아주 어두운 암흑
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, [0.05, 0.05, 0.05, 1.0])
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
+# 초기 3D 엔진 설정
+glEnable(GL_DEPTH_TEST)
+glEnable(GL_COLOR_MATERIAL)
+glMatrixMode(GL_PROJECTION)
+gluPerspective(60, (WIDTH / HEIGHT), 0.1, 50.0)
+glMatrixMode(GL_MODELVIEW)
 
-            // 손전등
-            flashlight = new THREE.SpotLight(0xffffff, 3, 25, Math.PI / 5, 0.5, 1);
-            flashlight.castShadow = true;
-            camera.add(flashlight);
-            flashlight.position.set(0, 0, 0);
-            flashlight.target.position.set(0, 0, -1);
-            camera.add(flashlight.target);
-            scene.add(camera);
+clock = pygame.time.Clock()
 
-            const ambient = new THREE.AmbientLight(0x080808);
-            scene.add(ambient);
+# 메인 루프
+while True:
+    dt = clock.tick(60) / 1000.0
 
-            // 바닥
-            const floorGeo = new THREE.PlaneGeometry(60, 60);
-            const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
-            const floor = new THREE.Mesh(floorGeo, floorMat);
-            floor.rotation.x = -Math.PI / 2;
-            floor.receiveShadow = true;
-            scene.add(floor);
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
 
-            createWalls();
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
 
-            // 열쇠 생성
-            const keyGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
-            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x554400 });
-            keyMesh = new THREE.Mesh(keyGeo, keyMat);
-            keyMesh.position.set(4, 0.5, -8);
-            scene.add(keyMesh);
+            # F키 상호작용 (손전등 / 열쇠 획득)
+            if event.key == pygame.K_f and not game_over and not game_clear:
+                flashlight_on = not flashlight_on
 
-            document.addEventListener('keydown', onKeyDown);
-            document.addEventListener('keyup', onKeyUp);
+                # 열쇠 근처에서 F키로 주우기
+                dist_to_key = math.sqrt(
+                    (camera_pos[0] - KEY_POS[0])**2 + 
+                    (camera_pos[2] - KEY_POS[2])**2
+                )
+                if dist_to_key < 2.5 and not has_key:
+                    has_key = True
 
-            // 화면 클릭으로 게임 시작
-            instructions.addEventListener('click', () => {
-                document.body.requestPointerLock = document.body.requestPointerLock || document.body.mozRequestPointerLock;
-                document.body.requestPointerLock();
-            });
+    if not game_over and not game_clear:
+        # 마우스 시점 회전
+        mx, my = pygame.mouse.get_rel()
+        camera_rot[1] += mx * 0.15
+        camera_rot[0] += my * 0.15
+        camera_rot[0] = max(-80, min(80, camera_rot[0]))
 
-            document.addEventListener('pointerlockchange', lockChangeAlert, false);
+        # WASD 이동
+        keys = pygame.key.get_pressed()
+        speed = 4.0 * dt
+        rad_yaw = math.radians(camera_rot[1])
 
-            document.addEventListener('mousemove', (e) => {
-                if (document.pointerLockElement === document.body) {
-                    camera.rotation.y -= e.movementX * 0.0025;
-                    camera.rotation.x -= e.movementY * 0.0025;
-                    camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, camera.rotation.x));
-                }
-            });
+        dx, dz = 0, 0
+        if keys[pygame.K_w]:
+            dx += math.sin(rad_yaw) * speed
+            dz -= math.cos(rad_yaw) * speed
+        if keys[pygame.K_s]:
+            dx -= math.sin(rad_yaw) * speed
+            dz += math.cos(rad_yaw) * speed
+        if keys[pygame.K_a]:
+            dx -= math.cos(rad_yaw) * speed
+            dz -= math.sin(rad_yaw) * speed
+        if keys[pygame.K_d]:
+            dx += math.cos(rad_yaw) * speed
+            dz += math.sin(rad_yaw) * speed
 
-            window.addEventListener('resize', onWindowResize, false);
-            animate();
-        }
+        # 폐가 벽 충돌 경계
+        new_x = max(-14.0, min(14.0, camera_pos[0] + dx))
+        new_z = max(-14.0, min(9.0, camera_pos[2] + dz))
+        camera_pos[0] = new_x
+        camera_pos[2] = new_z
 
-        function lockChangeAlert() {
-            if (document.pointerLockElement === document.body) {
-                instructions.style.display = 'none';
-            } else {
-                instructions.style.display = 'flex';
-            }
-        }
+        # 살인마 추적 AI
+        k_dx = camera_pos[0] - KILLER_POS[0]
+        k_dz = camera_pos[2] - KILLER_POS[2]
+        dist_killer = math.sqrt(k_dx**2 + k_dz**2)
+        if dist_killer > 0:
+            KILLER_POS[0] += (k_dx / dist_killer) * 2.2 * dt
+            KILLER_POS[2] += (k_dz / dist_killer) * 2.2 * dt
 
-        function createWalls() {
-            const wallMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
-            const walls = [
-                [0, 2.5, -20, 40, 5, 1],
-                [0, 2.5, 20, 40, 5, 1],
-                [-20, 2.5, 0, 1, 5, 40],
-                [20, 2.5, 0, 1, 5, 40],
-                [-5, 2.5, -5, 10, 5, 1],
-                [5, 2.5, -10, 1, 5, 15]
-            ];
+        # 갑툭튀 요건 (살인마가 근접했을 때)
+        if dist_killer < 1.8:
+            jumpscare_active = True
+            game_over = True
 
-            walls.forEach(w => {
-                const geo = new THREE.BoxGeometry(w[3], w[4], w[5]);
-                const wall = new THREE.Mesh(geo, wallMat);
-                wall.position.set(w[0], w[1], w[2]);
-                wall.castShadow = true;
-                wall.receiveShadow = true;
-                scene.add(wall);
-            });
-        }
+        # 탈출 문 도착 체크
+        dist_door = math.sqrt((camera_pos[0] - DOOR_POS[0])**2 + (camera_pos[2] - DOOR_POS[2])**2)
+        if dist_door < 2.0 and has_key:
+            game_clear = True
 
-        function onKeyDown(e) {
-            switch (e.code) {
-                case 'KeyW': moveForward = true; break;
-                case 'KeyS': moveBackward = true; break;
-                case 'KeyA': moveLeft = true; break;
-                case 'KeyD': moveRight = true; break;
-                case 'KeyF': interact(); break;
-            }
-        }
+    # 화면 렌더링
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    glLoadIdentity()
 
-        function onKeyUp(e) {
-            switch (e.code) {
-                case 'KeyW': moveForward = false; break;
-                case 'KeyS': moveBackward = false; break;
-                case 'KeyA': moveLeft = false; break;
-                case 'KeyD': moveRight = false; break;
-            }
-        }
+    # 카메라 적용
+    glRotatef(camera_rot[0], 1, 0, 0)
+    glRotatef(camera_rot[1], 0, 1, 0)
+    glTranslatef(-camera_pos[0], -camera_pos[1], -camera_pos[2])
 
-        function interact() {
-            // 손전등 토글
-            isFlashlightOn = !isFlashlightOn;
-            flashlight.visible = isFlashlightOn;
-            flashlightStatus.innerText = isFlashlightOn ? "ON (F)" : "OFF (F)";
-            flashlightStatus.style.color = isFlashlightOn ? "yellow" : "gray";
+    setup_lighting()
 
-            // 열쇠 획득
-            if (!hasKey && keyMesh) {
-                const dist = camera.position.distanceTo(keyMesh.position);
-                if (dist < 3.5) {
-                    hasKey = true;
-                    scene.remove(keyMesh);
-                    gameStatus.innerText = "열쇠를 찾았습니다! 탈출하세요!";
-                    gameStatus.style.color = "#00ff00";
-                }
-            }
-        }
+    # 1. 흉가 바닥 & 천장
+    draw_cube([0, -0.5, 0], [15, 0.1, 15], [0.15, 0.1, 0.08])
+    draw_cube([0, 3.5, 0], [15, 0.1, 15], [0.05, 0.05, 0.05])
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+    # 2. 폐가 벽면
+    draw_cube([0, 1.5, -15], [15, 2, 0.2], [0.2, 0.18, 0.15])
+    draw_cube([-15, 1.5, 0], [0.2, 2, 15], [0.2, 0.18, 0.15])
+    draw_cube([15, 1.5, 0], [0.2, 2, 15], [0.2, 0.18, 0.15])
 
-        function animate() {
-            requestAnimationFrame(animate);
+    # 3. 갇힌 출구 문 (초록색/붉은색)
+    door_color = [0.0, 0.8, 0.2] if has_key else [0.6, 0.1, 0.1]
+    draw_cube(DOOR_POS, [1.2, 1.5, 0.1], door_color)
 
-            const time = performance.now();
-            const delta = (time - prevTime) / 1000;
+    # 4. 바닥에 떨어진 열쇠 (황금색)
+    if not has_key:
+        draw_cube(KEY_POS, [0.15, 0.15, 0.15], [1.0, 0.8, 0.0])
 
-            velocity.x -= velocity.x * 10.0 * delta;
-            velocity.z -= velocity.z * 10.0 * delta;
+    # 5. 추적해오는 살인마 (붉은 눈의 괴물)
+    draw_cube(KILLER_POS, [0.5, 1.2, 0.5], [0.3, 0.0, 0.0])
+    draw_cube([KILLER_POS[0], KILLER_POS[1] + 0.8, KILLER_POS[2] + 0.4], [0.1, 0.1, 0.1], [1.0, 0.0, 0.0])
 
-            direction.z = Number(moveForward) - Number(moveBackward);
-            direction.x = Number(moveRight) - Number(moveLeft);
-            direction.normalize();
+    # 2D UI 및 점프스케어 렌더링
+    glDisable(GL_LIGHTING)
+    
+    if jumpscare_active:
+        # 깜짝 놀래키는 화면 효과 (붉은 깜빡임)
+        glClearColor(random.choice([0.8, 0.0]), 0.0, 0.0, 1.0)
+        render_text("살인마에게 잡혔습니다! [ESC로 종료]", (WIDTH//2 - 180, HEIGHT//2))
+    elif game_clear:
+        render_text("폐가 탈출 성공! [ESC로 종료]", (WIDTH//2 - 150, HEIGHT//2))
+    else:
+        glClearColor(0.0, 0.0, 0.0, 1.0)
+        state_text = "열쇠 획득 완료! 문으로 가세요!" if has_key else "열쇠를 찾으세요 (가까이서 F키)"
+        render_text(f"[F] 손전등 토글 / 상호작용 | {state_text}", (20, 20))
 
-            if (moveForward || moveBackward) velocity.z -= direction.z * 50.0 * delta;
-            if (moveLeft || moveRight) velocity.x -= direction.x * 50.0 * delta;
-
-            camera.moveForward(-velocity.z * delta);
-            camera.moveRight(velocity.x * delta);
-
-            if (keyMesh) keyMesh.rotation.y += 0.02;
-
-            prevTime = time;
-            renderer.render(scene, camera);
-        }
-
-        window.onload = init;
-    </script>
-</body>
-</html>
-"""
-
-# Streamlit 환경에서 마우스 잠금 및 클릭 이벤트를 수용하도록 높이 설정
-components.html(game_html, height=750)
+    pygame.display.flip()
