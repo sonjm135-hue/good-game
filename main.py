@@ -219,3 +219,7 @@ while True:
         render_text(f"[F] 손전등 토글 / 상호작용 | {state_text}", (20, 20))
 
     pygame.display.flip()
+streamlit
+pygame
+PyOpenGL
+PyOpenGL_accelerate
