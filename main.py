@@ -3,7 +3,6 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="3D 어둠 속의 탈출", layout="wide")
 
-# 게임 메인 HTML 및 Three.js 스크립트
 game_html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -13,22 +12,21 @@ game_html = """
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; color: white; }
         #canvas-container { width: 100vw; height: 100vh; }
         #ui-overlay {
-            position: absolute; top: 10px; left: 10px;
+            position: absolute; top: 15px; left: 15px;
             color: #fff; text-shadow: 2px 2px 4px #000;
-            pointer-events: none; font-size: 18px;
+            pointer-events: none; font-size: 18px; z-index: 10;
         }
         #instructions {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: #fff; text-align: center; font-size: 20px;
-            background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;
-            cursor: pointer;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.85); color: #fff; text-align: center;
+            cursor: pointer; z-index: 20;
         }
         #crosshair {
             position: absolute; top: 50%; left: 50%;
-            width: 8px; height: 8px; background: rgba(255,255,255,0.5);
+            width: 6px; height: 6px; background: rgba(255,255,255,0.8);
             border-radius: 50%; transform: translate(-50%, -50%);
-            pointer-events: none;
+            pointer-events: none; z-index: 10;
         }
     </style>
 </head>
@@ -36,15 +34,18 @@ game_html = """
     <div id="canvas-container"></div>
     <div id="crosshair"></div>
     <div id="ui-overlay">
-        <div> flashlight: <span id="flashlight-status" style="color: yellow;">ON (F)</span></div>
-        <div> status: <span id="game-status">Find the Key (F)</span></div>
+        <div>🔦 손전등: <span id="flashlight-status" style="color: yellow;">ON (F)</span></div>
+        <div>📜 미션: <span id="game-status" style="color: #ff4444;">열쇠를 찾으세요 (F키로 습득)</span></div>
     </div>
     <div id="instructions">
-        <h2>화면을 클릭하여 시작하세요</h2>
-        <p><b>W, A, S, D</b>: 이동</p>
-        <p><b>마우스</b>: 시점 회전</p>
-        <p><b>F</b>: 손전등 켜기/끄기 및 아이템 습득</p>
-        <p><b>ESC</b>: 마우스 커서 해제</p>
+        <h1 style="color: #ff3333; font-size: 40px; margin-bottom: 10px;">어둠 속의 탈출</h1>
+        <p style="font-size: 22px;"><b>[ 화면을 클릭하면 게임이 시작됩니다 ]</b></p>
+        <div style="margin-top: 20px; text-align: left; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px;">
+            <p>🎮 <b>W, A, S, D</b> : 이동</p>
+            <p>🖱️ <b>마우스</b> : 시점 회전</p>
+            <p>🔦 <b>F 키</b> : 손전등 켜기/끄기 & 아이템 습득</p>
+            <p>🚪 <b>ESC</b> : 마우스 해제</p>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -57,29 +58,26 @@ game_html = """
 
         let isFlashlightOn = true;
         let hasKey = false;
-        let keyMesh, monsterMesh;
+        let keyMesh;
 
         const instructions = document.getElementById('instructions');
         const flashlightStatus = document.getElementById('flashlight-status');
         const gameStatus = document.getElementById('game-status');
 
         function init() {
-            // 씬 생성
             scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x000000, 0.15); // 공포 분위기 안개
+            scene.fog = new THREE.FogExp2(0x000000, 0.15);
 
-            // 카메라 생성
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 0); // 플레이어 눈높이
+            camera.position.set(0, 1.6, 0);
 
-            // 렌더러
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // 손전등 (SpotLight)
-            flashlight = new THREE.SpotLight(0xffffff, 2, 20, Math.PI / 6, 0.5, 1);
+            // 손전등
+            flashlight = new THREE.SpotLight(0xffffff, 3, 25, Math.PI / 5, 0.5, 1);
             flashlight.castShadow = true;
             camera.add(flashlight);
             flashlight.position.set(0, 0, 0);
@@ -87,65 +85,66 @@ game_html = """
             camera.add(flashlight.target);
             scene.add(camera);
 
-            // 약한 ambient 조명 (완전한 암흑 방지)
-            const ambient = new THREE.AmbientLight(0x050505);
+            const ambient = new THREE.AmbientLight(0x080808);
             scene.add(ambient);
 
-            // 바닥 생성
-            const floorGeo = new THREE.PlaneGeometry(50, 50);
-            const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+            // 바닥
+            const floorGeo = new THREE.PlaneGeometry(60, 60);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             floor.receiveShadow = true;
             scene.add(floor);
 
-            // 미로 벽 생성
             createWalls();
 
             // 열쇠 생성
-            const keyGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x332200 });
+            const keyGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x554400 });
             keyMesh = new THREE.Mesh(keyGeo, keyMat);
-            keyMesh.position.set(5, 0.5, -10);
+            keyMesh.position.set(4, 0.5, -8);
             scene.add(keyMesh);
 
-            // 이벤트 리스너 등록
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
-            
-            // Pointer Lock (마우스 가두기 및 1인칭 조작)
+
+            // 화면 클릭으로 게임 시작
             instructions.addEventListener('click', () => {
+                document.body.requestPointerLock = document.body.requestPointerLock || document.body.mozRequestPointerLock;
                 document.body.requestPointerLock();
             });
 
-            document.addEventListener('pointerlockchange', () => {
-                if (document.pointerLockElement === document.body) {
-                    instructions.style.display = 'none';
-                } else {
-                    instructions.style.display = 'block';
-                }
-            });
+            document.addEventListener('pointerlockchange', lockChangeAlert, false);
 
             document.addEventListener('mousemove', (e) => {
                 if (document.pointerLockElement === document.body) {
-                    camera.rotation.y -= e.movementX * 0.002;
-                    camera.rotation.x -= e.movementY * 0.002;
+                    camera.rotation.y -= e.movementX * 0.0025;
+                    camera.rotation.x -= e.movementY * 0.0025;
                     camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, camera.rotation.x));
                 }
             });
 
+            window.addEventListener('resize', onWindowResize, false);
             animate();
         }
 
+        function lockChangeAlert() {
+            if (document.pointerLockElement === document.body) {
+                instructions.style.display = 'none';
+            } else {
+                instructions.style.display = 'flex';
+            }
+        }
+
         function createWalls() {
-            const wallMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
             const walls = [
-                [0, 2.5, -25, 50, 5, 1],
-                [0, 2.5, 25, 50, 5, 1],
-                [-25, 2.5, 0, 1, 5, 50],
-                [25, 2.5, 0, 1, 5, 50],
+                [0, 2.5, -20, 40, 5, 1],
+                [0, 2.5, 20, 40, 5, 1],
+                [-20, 2.5, 0, 1, 5, 40],
+                [20, 2.5, 0, 1, 5, 40],
                 [-5, 2.5, -5, 10, 5, 1],
-                [5, 2.5, -12, 1, 5, 15]
+                [5, 2.5, -10, 1, 5, 15]
             ];
 
             walls.forEach(w => {
@@ -184,16 +183,22 @@ game_html = """
             flashlightStatus.innerText = isFlashlightOn ? "ON (F)" : "OFF (F)";
             flashlightStatus.style.color = isFlashlightOn ? "yellow" : "gray";
 
-            // 열쇠 습득 로직 (가까이 있을 때)
+            // 열쇠 획득
             if (!hasKey && keyMesh) {
                 const dist = camera.position.distanceTo(keyMesh.position);
-                if (dist < 3) {
+                if (dist < 3.5) {
                     hasKey = true;
                     scene.remove(keyMesh);
-                    gameStatus.innerText = "Key Picked Up! Escape to Door!";
-                    gameStatus.style.color = "lime";
+                    gameStatus.innerText = "열쇠를 찾았습니다! 탈출하세요!";
+                    gameStatus.style.color = "#00ff00";
                 }
             }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
         function animate() {
@@ -209,13 +214,12 @@ game_html = """
             direction.x = Number(moveRight) - Number(moveLeft);
             direction.normalize();
 
-            if (moveForward || moveBackward) velocity.z -= direction.z * 40.0 * delta;
-            if (moveLeft || moveRight) velocity.x -= direction.x * 40.0 * delta;
+            if (moveForward || moveBackward) velocity.z -= direction.z * 50.0 * delta;
+            if (moveLeft || moveRight) velocity.x -= direction.x * 50.0 * delta;
 
             camera.moveForward(-velocity.z * delta);
             camera.moveRight(velocity.x * delta);
 
-            // 열쇠 회전 효과
             if (keyMesh) keyMesh.rotation.y += 0.02;
 
             prevTime = time;
@@ -228,5 +232,5 @@ game_html = """
 </html>
 """
 
-# Streamlit 내에 Fullscreen HTML 렌더링
-components.html(game_html, height=800, scrolling=False)
+# Streamlit 환경에서 마우스 잠금 및 클릭 이벤트를 수용하도록 높이 설정
+components.html(game_html, height=750)
