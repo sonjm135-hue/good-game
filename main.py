@@ -2,18 +2,18 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="🗡️ 검 강화하기",
-    page_icon="🗡️",
+    page_title="🎵 Rhythm Beat Game",
+    page_icon="🎵",
     layout="wide"
 )
 
-st.title("🗡️ 영웅의 검 강화하기")
+st.title("🎵 박자 맞추기 리듬 게임")
 
 st.markdown("""
-### 🕹️ 게임 방법
-1. **강화하기** 버튼을 눌러 검을 강화하세요!
-2. 강화 단계가 높아질수록 **성공 확률은 낮아지고, 실패 시 검이 파괴**될 위험이 커집니다.
-3. 검을 판매하여 골드를 확보하거나, 최고 강화 단계(+20단계)에 도전해 보세요!
+### 🕹️ 조작 방법
+* **키보드 라인**: `D` | `F` | `J` | `K`
+* 위에서 떨어지는 노트가 아래 **판정 선(라인)**에 맞춰 내려왔을 때 해당 키를 누르세요!
+* 타이밍 정확도에 따라 **PERFECT(100점)**, **GREAT(50점)**, **MISS(콤보 끊김)** 판정을 받습니다.
 """)
 
 game_html = """<!DOCTYPE html>
@@ -21,172 +21,255 @@ game_html = """<!DOCTYPE html>
 <head>
     <style>
         body {
-            margin: 0; padding: 0; background-color: #0b0f19; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0; padding: 0; background-color: #0d0e15; font-family: 'Arial', sans-serif;
             color: #fff; user-select: none; display: flex; justify-content: center; align-items: center; height: 100vh;
         }
-        #game-box {
-            width: 700px; background: #151d2a; border: 3px solid #2c3e50; border-radius: 16px; padding: 25px;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8); text-align: center; box-sizing: border-box;
+        #game-container {
+            width: 450px; height: 600px; background: #161925; border: 4px solid #8b5cf6;
+            border-radius: 12px; box-shadow: 0 0 30px rgba(139, 92, 246, 0.4); position: relative; overflow: hidden;
         }
-        #stats {
-            display: flex; justify-content: space-around; background: #1e293b; padding: 12px; border-radius: 10px;
-            margin-bottom: 20px; font-size: 18px; font-weight: bold; border: 1px solid #334155;
+        #hud {
+            position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: space-around;
+            font-size: 18px; font-weight: bold; z-index: 10; background: rgba(0,0,0,0.5); padding: 8px 0;
         }
-        #sword-stage {
-            height: 220px; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: radial-gradient(circle, rgba(30,58,138,0.4) 0%, rgba(15,23,42,0.8) 70%);
-            border-radius: 12px; border: 2px dashed #475569; margin-bottom: 20px; position: relative;
+        #judgment {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 36px; font-weight: 900; opacity: 0; transition: opacity 0.15s, transform 0.15s;
+            pointer-events: none; z-index: 10; text-shadow: 0 0 10px rgba(255,255,255,0.8);
         }
-        #sword-icon { font-size: 80px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.3)); transition: transform 0.2s; }
-        #sword-name { font-size: 26px; font-weight: bold; margin-top: 10px; text-shadow: 0 0 10px #38bdf8; }
-        #chance-info { font-size: 16px; color: #94a3b8; margin-bottom: 20px; }
-        
-        .btn-group { display: flex; gap: 15px; justify-content: center; }
-        button {
-            padding: 14px 28px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer;
-            transition: all 0.2s; color: #fff; text-shadow: 1px 1px 2px #000;
+        #combo-display {
+            position: absolute; top: 48%; left: 50%; transform: translateX(-50%);
+            font-size: 22px; font-weight: bold; color: #facc15; z-index: 10; pointer-events: none;
         }
-        #btn-upgrade { background: linear-gradient(135deg, #2563eb, #1d4ed8); box-shadow: 0 4px 12px rgba(37,99,235,0.4); }
-        #btn-upgrade:hover { background: linear-gradient(135deg, #3b82f6, #2563eb); transform: translateY(-2px); }
-        #btn-sell { background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 4px 12px rgba(5,150,105,0.4); }
-        #btn-sell:hover { background: linear-gradient(135deg, #10b981, #059669); transform: translateY(-2px); }
-        
-        #log {
-            margin-top: 20px; font-size: 20px; font-weight: bold; min-height: 30px;
-            text-shadow: 0 0 8px rgba(255,255,255,0.5);
-        }
+        canvas { background: #11131f; display: block; }
     </style>
 </head>
 <body>
-    <div id="game-box">
-        <div id="stats">
-            <div>골드: <span id="gold" style="color:#facc15;">1,000</span> G</div>
-            <div>최고 기록: <span id="max-level" style="color:#38bdf8;">+0</span></div>
+    <div id="game-container">
+        <div id="hud">
+            <div>SCORE: <span id="score" style="color:#a855f7;">0</span></div>
+            <div>ACCURACY: <span id="accuracy" style="color:#38bdf8;">100%</span></div>
         </div>
-
-        <div id="sword-stage">
-            <div id="sword-icon">🗡️</div>
-            <div id="sword-name" style="color:#e2e8f0;">+0 녹슨 낡은 단검</div>
-        </div>
-
-        <div id="chance-info">
-            강화 비용: <span id="cost" style="color:#facc15;">100</span> G | 
-            성공 확률: <span id="rate" style="color:#4ade80;">100%</span>
-        </div>
-
-        <div class="btn-group">
-            <button id="btn-upgrade" onclick="upgrade()">🔥 강화하기</button>
-            <button id="btn-sell" onclick="sell()">💰 판매하기 (<span id="sell-price">0</span> G)</button>
-        </div>
-
-        <div id="log">검을 강화하여 최고의 무기를 만드세요!</div>
+        <div id="judgment">PERFECT</div>
+        <div id="combo-display"></div>
+        <canvas id="gameCanvas" width="450" height="600"></canvas>
     </div>
 
 <script>
-const swords = [
-    { name: "녹슨 낡은 단검", icon: "🗡️", color: "#94a3b8", rate: 100, cost: 100, sell: 50 },
-    { name: "수련용 철검", icon: "⚔️", color: "#cbd5e1", rate: 95, cost: 200, sell: 250 },
-    { name: "기사의 강철검", icon: "⚔️", color: "#60a5fa", rate: 90, cost: 400, sell: 700 },
-    { name: "은빛 롱소드", icon: "🗡️", color: "#38bdf8", rate: 85, cost: 800, sell: 1700 },
-    { name: "불꽃 레이피어", icon: "🗡️", color: "#f97316", rate: 80, cost: 1500, sell: 3500 },
-    { name: "독사 가디언 소드", icon: "⚔️", color: "#a855f7", rate: 75, cost: 3000, sell: 7500 },
-    { name: "암흑의 마검", icon: "🗡️", color: "#ec4899", rate: 70, cost: 5000, sell: 15000 },
-    { name: "용사자 대검", icon: "⚔️", color: "#eab308", rate: 65, cost: 10000, sell: 30000 },
-    { name: "드래곤 슬레이어", icon: "🗡️", color: "#ef4444", rate: 60, cost: 20000, sell: 65000 },
-    { name: "천상의 에스토크", icon: "⚔️", color: "#38bdf8", rate: 55, cost: 40000, sell: 140000 },
-    { name: "성스러운 광휘검", icon: "🗡️", color: "#facc15", rate: 50, cost: 80000, sell: 300000 },
-    { name: "공허의 정령검", icon: "⚔️", color: "#c084fc", rate: 45, cost: 150000, sell: 650000 },
-    { name: "태초의 멸망도", icon: "🗡️", color: "#f43f5e", rate: 40, cost: 300000, sell: 1400000 },
-    { name: "시공의 신검", icon: "⚔️", color: "#22d3ee", rate: 35, cost: 600000, sell: 3000000 },
-    { name: "신살자의 무구", icon: "🗡️", color: "#f472b6", rate: 30, cost: 1200000, sell: 6500000 },
-    { name: "창조의 엑스칼리버", icon: "⚔️", color: "#fbbf24", rate: 25, cost: 2500000, sell: 15000000 },
-    { name: "차원 파괴의검", icon: "🗡️", color: "#a7f3d0", rate: 20, cost: 5000000, sell: 35000000 },
-    { name: "영원의 인피니티 블레이드", icon: "⚔️", color: "#38bdf8", rate: 15, cost: 10000000, sell: 80000000 },
-    { name: "전설의 유기적 초신성검", icon: "🔱", color: "#f43f5e", rate: 10, cost: 25000000, sell: 200000000 },
-    { name: "절대자의 절대검", icon: "👑", color: "#facc15", rate: 5, cost: 50000000, sell: 500000000 },
-    { name: "신화 속 제왕의 신검", icon: "💎", color: "#a855f7", rate: 0, cost: 0, sell: 1500000000 }
-];
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-let level = 0;
-let gold = 1000;
-let maxLevel = 0;
+const scoreEl = document.getElementById('score');
+const accuracyEl = document.getElementById('accuracy');
+const judgmentEl = document.getElementById('judgment');
+const comboDisplay = document.getElementById('combo-display');
 
-function updateUI() {
-    const cur = swords[level];
-    document.getElementById('gold').innerText = gold.toLocaleString();
-    document.getElementById('max-level').innerText = '+' + maxLevel;
-    document.getElementById('sword-icon').innerText = cur.icon;
-    document.getElementById('sword-name').innerText = '+' + level + ' ' + cur.name;
-    document.getElementById('sword-name').style.color = cur.color;
-    document.getElementById('cost').innerText = cur.cost.toLocaleString();
-    document.getElementById('rate').innerText = cur.rate + '%';
-    document.getElementById('sell-price').innerText = cur.sell.toLocaleString();
+// 오디오 효과음 생성 함수
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playHitSound(freq) {
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+}
 
-    if (level === 20) {
-        document.getElementById('chance-info').innerText = "최고 단계에 도달했습니다!";
+const keyMap = ['d', 'f', 'j', 'k'];
+const keyFreqs = [261.63, 329.63, 392.00, 523.25]; // C, E, G, C(음계)
+const laneColors = ['#f43f5e', '#3b82f6', '#3b82f6', '#f43f5e'];
+
+const laneWidth = canvas.width / 4;
+const judgeY = 510; // 판정 선 Y 위치
+const noteSpeed = 6;
+
+let notes = [];
+let score = 0;
+let combo = 0;
+let maxCombo = 0;
+let totalHits = 0;
+let successfulHits = 0;
+
+let keyState = [false, false, false, false];
+
+// 랜덤 노트 생성 타이머
+setInterval(() => {
+    const lane = Math.floor(Math.random() * 4);
+    notes.push({
+        lane: lane,
+        y: -30,
+        hit: false
+    });
+}, 450);
+
+document.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    const laneIndex = keyMap.indexOf(key);
+
+    if (laneIndex !== -1 && !keyState[laneIndex]) {
+        keyState[laneIndex] = true;
+        checkHit(laneIndex);
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    const key = e.key.toLowerCase();
+    const laneIndex = keyMap.indexOf(key);
+    if (laneIndex !== -1) {
+        keyState[laneIndex] = false;
+    }
+});
+
+function checkHit(lane) {
+    let hitFound = false;
+
+    for (let i = 0; i < notes.length; i++) {
+        const note = notes[i];
+        if (note.lane === lane && !note.hit) {
+            const dist = Math.abs(note.y - judgeY);
+
+            if (dist < 60) {
+                hitFound = true;
+                note.hit = true;
+                totalHits++;
+                playHitSound(keyFreqs[lane]);
+
+                if (dist < 20) {
+                    showJudgment("PERFECT", "#a855f7");
+                    score += 100;
+                    combo++;
+                    successfulHits += 1.0;
+                } else if (dist < 42) {
+                    showJudgment("GREAT", "#38bdf8");
+                    score += 50;
+                    combo++;
+                    successfulHits += 0.7;
+                } else {
+                    showJudgment("GOOD", "#4ade80");
+                    score += 20;
+                    combo++;
+                    successfulHits += 0.4;
+                }
+                break;
+            }
+        }
+    }
+
+    if (!hitFound) {
+        // 비어있는 곳을 눌렀을 때
+    }
+
+    updateStats();
+}
+
+function showJudgment(text, color) {
+    judgmentEl.innerText = text;
+    judgmentEl.style.color = color;
+    judgmentEl.style.opacity = '1';
+    judgmentEl.style.transform = 'translate(-50%, -50%) scale(1.2)';
+
+    setTimeout(() => {
+        judgmentEl.style.opacity = '0';
+        judgmentEl.style.transform = 'translate(-50%, -50%) scale(1.0)';
+    }, 200);
+}
+
+function updateStats() {
+    scoreEl.innerText = score;
+    if (combo > 1) {
+        comboDisplay.innerText = combo + " COMBO!";
     } else {
-        document.getElementById('chance-info').innerHTML = `
-            강화 비용: <span style="color:#facc15;">${cur.cost.toLocaleString()}</span> G | 
-            성공 확률: <span style="color:#4ade80;">${cur.rate}%</span>
-        `;
+        comboDisplay.innerText = "";
+    }
+
+    const acc = totalHits === 0 ? 100 : Math.round((successfulHits / totalHits) * 100);
+    accuracyEl.innerText = acc + "%";
+}
+
+function update() {
+    for (let i = notes.length - 1; i >= 0; i--) {
+        const note = notes[i];
+        note.y += noteSpeed;
+
+        // 판정 선을 지나쳐 무시된 경우 (MISS)
+        if (note.y > judgeY + 50 && !note.hit) {
+            notes.splice(i, 1);
+            combo = 0;
+            totalHits++;
+            showJudgment("MISS", "#ef4444");
+            updateStats();
+        } else if (note.hit && note.y > judgeY + 20) {
+            notes.splice(i, 1);
+        }
     }
 }
 
-function upgrade() {
-    const cur = swords[level];
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (level >= 20) {
-        setLog("이미 최고 단계의 검입니다!", "#facc15");
-        return;
+    // 트랙 라인 그리기
+    for (let i = 0; i < 4; i++) {
+        ctx.strokeStyle = '#22263a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(i * laneWidth, 0);
+        ctx.lineTo(i * laneWidth, canvas.height);
+        ctx.stroke();
+
+        // 키 버튼 눌림 효과
+        if (keyState[i]) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.fillRect(i * laneWidth, 0, laneWidth, canvas.height);
+        }
     }
 
-    if (gold < cur.cost) {
-        setLog("골드가 부족합니다!", "#ef4444");
-        return;
+    // 판정 라인 그리기
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, judgeY);
+    ctx.lineTo(canvas.width, judgeY);
+    ctx.stroke();
+
+    // 키 가이드 텍스트
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = keyState[i] ? '#fff' : '#64748b';
+        ctx.fillText(keyMap[i].toUpperCase(), i * laneWidth + laneWidth / 2, judgeY + 45);
     }
 
-    gold -= cur.cost;
+    // 노트 그리기
+    notes.forEach(note => {
+        if (!note.hit) {
+            ctx.fillStyle = laneColors[note.lane];
+            ctx.beginPath();
+            ctx.roundRect(note.lane * laneWidth + 8, note.y - 10, laneWidth - 16, 20, 6);
+            ctx.fill();
 
-    // 아이콘 흔들기 애니메이션
-    const iconEl = document.getElementById('sword-icon');
-    iconEl.style.transform = 'scale(1.3) rotate(15deg)';
-    setTimeout(() => { iconEl.style.transform = 'scale(1) rotate(0deg)'; }, 150);
-
-    const rand = Math.random() * 100;
-    if (rand < cur.rate) {
-        level++;
-        if (level > maxLevel) maxLevel = level;
-        setLog(`🎉 강화 성공! (+${level} ${swords[level].name})`, "#4ade80");
-    } else {
-        setLog(`💥 강화 실패! 검이 깨졌습니다... (+0 초기화)`, "#ef4444");
-        level = 0;
-    }
-
-    updateUI();
+            // 노트 테두리 빛 효과
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    });
 }
 
-function sell() {
-    const cur = swords[level];
-    if (level === 0) {
-        setLog("기본 검은 판매할 수 없습니다.", "#cbd5e1");
-        return;
-    }
-
-    gold += cur.sell;
-    setLog(`💰 검을 판매하여 +${cur.sell.toLocaleString()} G 를 얻었습니다!`, "#facc15");
-    level = 0;
-    updateUI();
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
 }
 
-function setLog(msg, color) {
-    const logEl = document.getElementById('log');
-    logEl.innerText = msg;
-    logEl.style.color = color;
-}
-
-updateUI();
+gameLoop();
 </script>
 </body>
 </html>"""
 
-components.html(game_html, height=560)
+components.html(game_html, height=640)
