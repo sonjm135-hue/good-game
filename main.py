@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="NBA Superstars 2P - Real Voice Edition", layout="wide")
+st.set_page_config(page_title="NBA Superstars 2P - Deep Male Voice", layout="wide")
 
 # Streamlit 여백 및 패딩 제거
 st.markdown("""
@@ -106,7 +106,7 @@ game_html = """
     <div id="controls-guide">
         <div><b class="p1-color">CURRY</b>: <span class="key">A</span><span class="key">D</span> 이동 | <span class="key">W</span> 점프 | <span class="key">Space</span> 슛 | <span class="key">E</span> 스틸</div>
         <div><b class="p2-color">LEBRON</b>: <span class="key">←</span><span class="key">→</span> 이동 | <span class="key">↑</span> 점프 | <span class="key">Enter</span> 슛 | <span class="key">K</span> 스틸</div>
-        <div style="color: #00e676;">🗣️ 초록 게이지 성공 시 <b style="color:#00e676;">진짜 음성</b> 출력!</div>
+        <div style="color: #00e676;">🎙️ 초록 게이지 적중 시 <b style="color:#00e676;">낮고 굵은 남성 보이스</b> 출력!</div>
     </div>
 
     <div id="game-over">
@@ -118,35 +118,68 @@ game_html = """
     <script>
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         let audioCtx;
+        let maleVoice = null;
+        let backupAudio = new Audio('https://orangefreesounds.com/wp-content/uploads/2026/07/Green-giant-sound-effect.mp3');
 
         function initAudio() {
             if (!audioCtx) audioCtx = new AudioCtx();
             if (audioCtx.state === 'suspended') audioCtx.resume();
         }
 
-        // 실제 보컬 음성 출력 (SpeechSynthesis API)
-        function playGreenGiantVoice() {
+        // 남성 저음 보이스 선택 함수
+        function loadMaleVoice() {
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // 이전 음성 취소
+                const voices = window.speechSynthesis.getVoices();
+                // 1순위: 영어 전용 굵은 남성 목소리 검색
+                maleVoice = voices.find(v => v.lang.startsWith('en') && (
+                    v.name.includes('Male') || 
+                    v.name.includes('David') || 
+                    v.name.includes('Mark') || 
+                    v.name.includes('George') ||
+                    v.name.includes('Guy') ||
+                    v.name.includes('Google US English')
+                ));
+
+                // 2순위: 남성 키워드가 포함된 임의의 영어 목소리
+                if (!maleVoice) {
+                    maleVoice = voices.find(v => v.lang.startsWith('en') && !v.name.includes('Female') && !v.name.includes('Zira'));
+                }
+            }
+        }
+
+        if ('speechSynthesis' in window) {
+            loadMaleVoice();
+            window.speechSynthesis.onvoiceschanged = loadMaleVoice;
+        }
+
+        // 굵고 낮은 남성 목소리로 재생
+        function playDeepMaleVoice() {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
 
                 const utterance = new SpeechSynthesisUtterance("Ho Ho Ho, Green Giant!");
                 utterance.lang = 'en-US';
-                utterance.pitch = 0.5; // 거인의 굵은 보컬 톤
-                utterance.rate = 0.85;  // 묵직한 템포
+                utterance.pitch = 0.3; // 아주 낮은 굵은 톤 (0.0 ~ 2.0 중 0.3)
+                utterance.rate = 0.8;  // 웅장한 템포
                 utterance.volume = 1.0;
 
-                // 영어 남성/굵은 목소리 지원 우선 검색
-                const voices = window.speechSynthesis.getVoices();
-                const maleVoice = voices.find(v => v.lang.includes('en') && (v.name.includes('Male') || v.name.includes('David') || v.name.includes('George')));
-                if (maleVoice) utterance.voice = maleVoice;
-
-                window.speechSynthesis.speak(utterance);
+                if (maleVoice) {
+                    utterance.voice = maleVoice;
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    // 남성 보이스가 불가능할 시 백업 MP3 재생
+                    backupAudio.currentTime = 0;
+                    backupAudio.play().catch(e => console.log(e));
+                }
+            } else {
+                backupAudio.currentTime = 0;
+                backupAudio.play().catch(e => console.log(e));
             }
         }
 
         function playSound(type) {
             if (type === 'green_giant') {
-                playGreenGiantVoice();
+                playDeepMaleVoice();
                 return;
             }
 
@@ -279,13 +312,6 @@ game_html = """
         function init() {
             resizeCanvas();
 
-            // 음성 가용 목록 로드
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.onvoiceschanged = () => {
-                    window.speechSynthesis.getVoices();
-                };
-            }
-
             window.addEventListener('keydown', e => {
                 initAudio();
 
@@ -414,7 +440,7 @@ game_html = """
                 ball.vx = dx / timeToRim;
                 ball.vy = (targetHoop.rimY - 15 - ball.y - 0.5 * gravity * Math.pow(timeToRim, 2)) / timeToRim;
 
-                // 초록색 게이지 타이밍 성공 시 음성 재생!
+                // 초록색 게이지 타이밍 성공 시 굵은 남성 음성 재생
                 playSound('green_giant');
                 screenShake = player.isFire ? 10 : 6;
                 addText(player.isFire ? "🔥 GREEN GIANT FIRE!" : "🥦 HO HO HO! GREEN GIANT!", player.x, player.y - 40, '#00e676', 1.6);
