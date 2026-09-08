@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="2P Arcade Basketball", layout="wide")
+st.set_page_config(page_title="2P Basketball with Shooting Animation", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -70,37 +70,37 @@ game_html = """
 
         // 플레이어 설정
         const p1 = {
-            x: 150, y: 380, width: 35, height: 60,
+            x: 180, y: 380, width: 35, height: 60,
             color: '#ff5252', vx: 0, vy: 0, isGrounded: false,
-            hasBall: false, id: 1
+            hasBall: false, id: 1, armAngle: 0, shootAnimTimer: 0, facing: 1
         };
 
         const p2 = {
-            x: 715, y: 380, width: 35, height: 60,
+            x: 685, y: 380, width: 35, height: 60,
             color: '#448aff', vx: 0, vy: 0, isGrounded: false,
-            hasBall: false, id: 2
+            hasBall: false, id: 2, armAngle: 0, shootAnimTimer: 0, facing: -1
         };
 
         // 농구공 설정
         const ball = {
             x: 450, y: 200, radius: 12,
-            vx: 0, vy: 0, holder: null
+            vx: 0, vy: 0, holder: null, rotation: 0, trail: []
         };
 
         // 골대 설정 (좌/우)
         const hoops = [
-            { x: 50, y: 220, rimX: 75, rimY: 250, side: 'left' },
-            { x: 850, y: 220, rimX: 825, rimY: 250, side: 'right' }
+            { x: 50, y: 200, rimX: 80, rimY: 240, side: 'left' },
+            { x: 850, y: 200, rimX: 820, rimY: 240, side: 'right' }
         ];
 
-        const gravity = 0.5;
+        const gravity = 0.45;
         const groundY = 440;
 
         function init() {
             window.addEventListener('keydown', e => {
                 keys[e.code] = true;
-                if (e.code === 'Space' && p1.hasBall) shootBall(p1, 1);
-                if (e.code === 'Enter' && p2.hasBall) shootBall(p2, -1);
+                if (e.code === 'Space' && p1.hasBall) shootBall(p1);
+                if (e.code === 'Enter' && p2.hasBall) shootBall(p2);
             });
 
             window.addEventListener('keyup', e => {
@@ -128,8 +128,8 @@ game_html = """
             document.getElementById('timer').innerText = 60;
             document.getElementById('game-over').style.display = 'none';
 
-            p1.x = 150; p1.y = 380; p1.vx = 0; p1.vy = 0;
-            p2.x = 715; p2.y = 380; p2.vx = 0; p2.vy = 0;
+            p1.x = 180; p1.y = 380; p1.vx = 0; p1.vy = 0;
+            p2.x = 685; p2.y = 380; p2.vx = 0; p2.vy = 0;
             resetBall();
             startTimer();
         }
@@ -140,26 +140,37 @@ game_html = """
             ball.vx = 0;
             ball.vy = 0;
             ball.holder = null;
+            ball.trail = [];
             p1.hasBall = false;
             p2.hasBall = false;
         }
 
-        function shootBall(player, defaultDir) {
-            ball.holder = null;
-            player.hasBall = false;
-            
-            // 이동하는 방향으로 조준 가중치 추가
-            let dir = defaultDir;
-            if (player.vx !== 0) dir = Math.sign(player.vx);
+        function shootBall(player) {
+            // 상대 골대 조준 계산
+            const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
+            const targetX = targetHoop.rimX;
+            const targetY = targetHoop.rimY;
 
-            ball.vx = dir * 11 + player.vx * 0.5;
-            ball.vy = -12;
-            ball.x += dir * 20;
+            // 슛 애니메이션 발동
+            player.shootAnimTimer = 15;
+            player.hasBall = false;
+            ball.holder = null;
+
+            // 물리 투구 궤적 계산 (골대 쪽으로 예쁘게 비상)
+            const dx = targetX - (player.x + player.width / 2);
+            const dist = Math.abs(dx);
+
+            ball.x = player.x + player.width / 2 + player.facing * 10;
+            ball.y = player.y - 10;
+
+            // 거리 기반 자동 정밀 슛 속도 산출
+            ball.vx = (dx / dist) * (6.5 + dist * 0.008) + player.vx * 0.3;
+            ball.vy = -12.5 - Math.min(dist * 0.01, 3);
         }
 
         function updatePlayer(p, leftKey, rightKey, jumpKey) {
-            if (keys[leftKey]) p.vx = -4;
-            else if (keys[rightKey]) p.vx = 4;
+            if (keys[leftKey]) { p.vx = -4; p.facing = -1; }
+            else if (keys[rightKey]) { p.vx = 4; p.facing = 1; }
             else p.vx = 0;
 
             if (keys[jumpKey] && p.isGrounded) {
@@ -171,41 +182,57 @@ game_html = """
             p.x += p.vx;
             p.y += p.vy;
 
-            // 이동 제한
             if (p.x < 0) p.x = 0;
             if (p.x + p.width > canvas.width) p.x = canvas.width - p.width;
 
-            // 바닥 충돌
             if (p.y + p.height >= groundY) {
                 p.y = groundY - p.height;
                 p.vy = 0;
                 p.isGrounded = true;
             }
 
-            // 공 획득 체크
+            // 슛 애니메이션 타이머 감소
+            if (p.shootAnimTimer > 0) {
+                p.shootAnimTimer--;
+                p.armAngle = -Math.PI / 3 * p.facing; // 슛할 때 팔을 들어올림
+            } else {
+                p.armAngle = p.hasBall ? -Math.PI / 6 * p.facing : 0;
+            }
+
+            // 공을 가지고 있을 때의 위치 업데이트
             if (!ball.holder) {
                 const dist = Math.hypot((p.x + p.width/2) - ball.x, (p.y + p.height/2) - ball.y);
-                if (dist < 40) {
+                if (dist < 38) {
                     ball.holder = p;
                     p.hasBall = true;
                 }
             } else if (ball.holder === p) {
-                ball.x = p.x + p.width / 2 + (p.id === 1 ? 15 : -15);
-                ball.y = p.y + 15;
+                ball.x = p.x + p.width / 2 + p.facing * 12;
+                ball.y = p.y + 10;
+                ball.vx = 0;
+                ball.vy = 0;
             }
         }
 
         function updateBall() {
-            if (ball.holder) return;
+            if (ball.holder) {
+                ball.trail = [];
+                return;
+            }
 
-            ball.vy += gravity * 0.8;
+            ball.vy += gravity;
             ball.x += ball.vx;
             ball.y += ball.vy;
+
+            // 공 회전 및 궤적 잔상 효과
+            ball.rotation += ball.vx * 0.05;
+            ball.trail.push({ x: ball.x, y: ball.y });
+            if (ball.trail.length > 8) ball.trail.shift();
 
             // 바닥 튕김
             if (ball.y + ball.radius >= groundY) {
                 ball.y = groundY - ball.radius;
-                ball.vy *= -0.6;
+                ball.vy *= -0.65;
                 ball.vx *= 0.8;
             }
 
@@ -216,13 +243,14 @@ game_html = """
 
             // 골대 충돌 및 득점 체크
             hoops.forEach(hoop => {
-                // 백보드 충돌
-                const bbX = hoop.side === 'left' ? hoop.x : hoop.x;
-                if (Math.abs(ball.x - bbX) < 15 && ball.y > hoop.y && ball.y < hoop.y + 80) {
-                    ball.vx *= -0.8;
+                // 백보드 바운스
+                const isLeftBb = hoop.side === 'left' && Math.abs(ball.x - hoop.x) < 15;
+                const isRightBb = hoop.side === 'right' && Math.abs(ball.x - hoop.x) < 15;
+                if ((isLeftBb || isRightBb) && ball.y > hoop.y && ball.y < hoop.y + 80) {
+                    ball.vx *= -0.7;
                 }
 
-                // 림 득점 판정 (위에서 아래로 통과)
+                // 림 득점 (통과 애니메이션)
                 const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
                 if (distToRim < 18 && ball.vy > 0) {
                     if (hoop.side === 'right') {
@@ -258,18 +286,76 @@ game_html = """
             document.getElementById('game-over').style.display = 'flex';
         }
 
+        function drawPlayer(p) {
+            ctx.save();
+            ctx.translate(p.x + p.width / 2, p.y + p.height / 2);
+
+            // 몸통
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.width / 2, -p.height / 2, p.width, p.height);
+
+            // 눈 (바라보는 방향)
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(p.facing * 5, -p.height / 2 + 8, 8, 8);
+
+            // 팔 애니메이션
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            const armX = Math.cos(p.armAngle) * 22 * p.facing;
+            const armY = Math.sin(p.armAngle) * 22;
+            ctx.lineTo(armX, armY);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawBall() {
+            // 공 잔상 애니메이션 (궤적)
+            for (let i = 0; i < ball.trail.length; i++) {
+                const t = ball.trail[i];
+                ctx.fillStyle = `rgba(255, 152, 0, ${ (i + 1) / 12 })`;
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, ball.radius * ((i + 1) / 10), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 농구공 본체 + 회전 무늬
+            ctx.save();
+            ctx.translate(ball.x, ball.y);
+            ctx.rotate(ball.rotation);
+
+            ctx.fillStyle = '#ff9800';
+            ctx.beginPath();
+            ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+            ctx.moveTo(-ball.radius, 0);
+            ctx.lineTo(ball.radius, 0);
+            ctx.moveTo(0, -ball.radius);
+            ctx.lineTo(0, ball.radius);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 바닥
+            // 코트 바닥
             ctx.fillStyle = '#3e2723';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
             ctx.fillStyle = '#ffb74d';
             ctx.fillRect(0, groundY, canvas.width, 5);
 
-            // 골대 그리프
+            // 골대 그리기
             hoops.forEach(h => {
-                // 백보드
+                // 지지대 및 백보드
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(h.side === 'left' ? h.x - 10 : h.x, h.y, 10, 80);
                 // 림
@@ -280,21 +366,10 @@ game_html = """
                 ctx.stroke();
             });
 
-            // 플레이어 1
-            ctx.fillStyle = p1.color;
-            ctx.fillRect(p1.x, p1.y, p1.width, p1.height);
-            // 플레이어 2
-            ctx.fillStyle = p2.color;
-            ctx.fillRect(p2.x, p2.y, p2.width, p2.height);
-
-            // 농구공
-            ctx.fillStyle = '#ff9800';
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
+            // 플레이어 및 공 그리기
+            drawPlayer(p1);
+            drawPlayer(p2);
+            drawBall();
         }
 
         function gameLoop() {
