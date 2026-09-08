@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="NBA Superstars 2P", layout="wide")
+st.set_page_config(page_title="NBA Superstars 2P - 3 Quarters", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -9,19 +9,20 @@ game_html = """
 <head>
     <meta charset="UTF-8">
     <style>
-        body { margin: 0; overflow: hidden; background-color: #0b0c10; font-family: 'Impact', 'Arial Black', sans-serif; user-select: none; }
+        body { margin: 0; overflow: hidden; background-color: #0d0e15; font-family: 'Impact', 'Arial Black', sans-serif; user-select: none; }
         #canvas-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        canvas { background: #1f2833; border-bottom: 10px solid #c5a059; box-shadow: 0 0 35px rgba(197, 160, 89, 0.3); }
+        canvas { background: #181925; border-bottom: 10px solid #c5a059; box-shadow: 0 0 35px rgba(197, 160, 89, 0.3); }
         
         #ui {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 50px; color: #fff; font-size: 26px; font-weight: bold;
-            background: rgba(11, 12, 16, 0.9); padding: 12px 40px; border-radius: 20px; z-index: 10; border: 2px solid #c5a059;
+            display: flex; gap: 35px; color: #fff; font-size: 24px; font-weight: bold; align-items: center;
+            background: rgba(11, 12, 16, 0.92); padding: 12px 35px; border-radius: 20px; z-index: 10; border: 2px solid #c5a059;
             box-shadow: 0 0 20px rgba(0,0,0,0.8);
         }
         .p1-color { color: #ffc72c; text-shadow: 0 0 10px #1d428a; }
-        .p2-color { color: #552583; text-shadow: 0 0 10px #fdb927; }
-        .fire-text { color: #ffea00; animation: blink 0.3s infinite alternate; }
+        .p2-color { color: #fdb927; text-shadow: 0 0 10px #552583; }
+        .q-badge { background: #ff3d00; color: #fff; padding: 4px 12px; border-radius: 8px; font-size: 18px; letter-spacing: 1px; }
+        .fire-text { color: #ffea00; animation: blink 0.3s infinite alternate; font-size: 18px; }
 
         @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
 
@@ -30,16 +31,19 @@ game_html = """
             background: rgba(0,0,0,0.92); display: none; flex-direction: column;
             justify-content: center; align-items: center; color: #fff; z-index: 30;
         }
+        .overlay-title { font-size: 55px; margin: 0; text-shadow: 0 0 20px #c5a059; text-align: center; }
+        .overlay-sub { font-size: 26px; margin-top: 15px; }
+
         #restart-btn {
-            margin-top: 25px; padding: 15px 45px; font-size: 28px; font-weight: bold;
+            margin-top: 30px; padding: 15px 45px; font-size: 26px; font-weight: bold;
             color: #000; background: #c5a059; border: none; border-radius: 12px; cursor: pointer;
-            box-shadow: 0 0 20px #c5a059; transition: 0.1s;
+            box-shadow: 0 0 20px #c5a059; transition: 0.15s;
         }
         #restart-btn:hover { transform: scale(1.1); background: #ffea00; }
 
         #controls-guide {
             position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 40px; color: #fff; font-size: 13px; font-family: sans-serif;
+            display: flex; gap: 35px; color: #fff; font-size: 13px; font-family: sans-serif;
             background: rgba(0,0,0,0.85); padding: 8px 25px; border-radius: 10px; border: 1px solid #444;
         }
         .key { background: #333; padding: 2px 6px; border-radius: 4px; border: 1px solid #666; color: #ffea00; }
@@ -48,7 +52,10 @@ game_html = """
 <body>
     <div id="ui">
         <div>30. CURRY <span id="p1-combo" class="fire-text"></span>: <span id="p1-score" class="p1-color">0</span></div>
-        <div style="color: #c5a059;">TIME <span id="timer">45</span>s</div>
+        <div style="display:flex; flex-direction:column; align-items:center;">
+            <span id="q-text" class="q-badge">1st QTR</span>
+            <span style="color: #ffea00; margin-top: 2px;"><span id="timer">30</span>s</span>
+        </div>
         <div>23. LEBRON <span id="p2-combo" class="fire-text"></span>: <span id="p2-score" class="p2-color">0</span></div>
     </div>
 
@@ -62,9 +69,9 @@ game_html = """
     </div>
 
     <div id="game-over">
-        <h1 id="winner-text" style="font-size: 60px; margin: 0; text-shadow: 0 0 20px #c5a059;">STEPH CURRY WINS!</h1>
-        <p style="font-size: 30px; margin-top: 10px;">SCORE <span id="final-p1" class="p1-color">0</span> : <span id="final-p2" class="p2-color">0</span></p>
-        <button id="restart-btn" onclick="resetGame()">REMATCH (한 판 더!!)</button>
+        <h1 id="winner-text" class="overlay-title">STEPH CURRY WINS!</h1>
+        <p id="final-score" class="overlay-sub">최종 점수 <span id="final-p1" class="p1-color">0</span> : <span id="final-p2" class="p2-color">0</span></p>
+        <button id="restart-btn" onclick="onBtnClick()">새 경기 시작!</button>
     </div>
 
     <script>
@@ -98,7 +105,7 @@ game_html = """
                 osc.frequency.setValueAtTime(659, now + 0.08); osc.frequency.setValueAtTime(783, now + 0.16);
                 osc.frequency.setValueAtTime(1046, now + 0.24);
                 gain.gain.setValueAtTime(0.35, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-                osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.35);
+                osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.4);
             } else if (type === 'bounce') {
                 const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
                 osc.type = 'sine'; osc.frequency.setValueAtTime(180, now);
@@ -111,15 +118,9 @@ game_html = """
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // 커리 / 르브론 이미지 로드
-        const imgCurry = new Image();
-        imgCurry.src = 'https://a.espncdn.com/combiner/i?img=/i/headshots/nba/players/full/3975.png&w=350&h=254'; // Steph Curry Headshot
-        
-        const imgLeBron = new Image();
-        imgLeBron.src = 'https://a.espncdn.com/combiner/i?img=/i/headshots/nba/players/full/1966.png&w=350&h=254'; // LeBron James Headshot
-
-        const GAME_TIME = 45;
-        let p1Score = 0, p2Score = 0, timeLeft = GAME_TIME;
+        const QTR_TIME = 30; // 쿼터당 30초
+        let currentQuarter = 1; // 총 3쿼터
+        let p1Score = 0, p2Score = 0, timeLeft = QTR_TIME;
         let gameActive = true, timerInterval;
         let screenShake = 0;
         let particles = [];
@@ -133,25 +134,25 @@ game_html = """
         ];
 
         const p1 = {
-            name: "STEPH CURRY", number: "30", img: imgCurry,
-            x: 200, y: 340, width: 44, height: 80, headRadius: 28,
-            primaryColor: '#1d428a', secondaryColor: '#ffc72c', // GSW Colors
-            vx: 0, vy: 0, isGrounded: false, hasBall: false, id: 1, facing: 1,
+            id: 1, name: "CURRY", number: "30", skinColor: '#e0ac69', hairColor: '#3a2312',
+            primaryColor: '#1d428a', secondaryColor: '#ffc72c', headbandColor: '#ffc72c',
+            x: 200, y: 340, width: 44, height: 80, headRadius: 26,
+            vx: 0, vy: 0, isGrounded: false, hasBall: false, facing: 1,
             gauge: 0, gaugeDir: 1, isCharging: false, streak: 0, isFire: false,
             stunTimer: 0, walkCycle: 0, stealAnim: 0, shootAnim: 0
         };
 
         const p2 = {
-            name: "LEBRON JAMES", number: "23", img: imgLeBron,
-            x: 710, y: 340, width: 44, height: 80, headRadius: 28,
-            primaryColor: '#552583', secondaryColor: '#fdb927', // LAL Colors
-            vx: 0, vy: 0, isGrounded: false, hasBall: false, id: 2, facing: -1,
+            id: 2, name: "LEBRON", number: "23", skinColor: '#8d5524', hairColor: '#1a0d00',
+            primaryColor: '#552583', secondaryColor: '#fdb927', headbandColor: '#552583',
+            x: 710, y: 340, width: 44, height: 80, headRadius: 26,
+            vx: 0, vy: 0, isGrounded: false, hasBall: false, facing: -1,
             gauge: 0, gaugeDir: 1, isCharging: false, streak: 0, isFire: false,
             stunTimer: 0, walkCycle: 0, stealAnim: 0, shootAnim: 0
         };
 
         const ball = {
-            x: 480, y: 200, radius: 13, vx: 0, vy: 0, holder: null, rotation: 0, trail: [], isFireBall: false
+            x: 480, y: 200, radius: 13, vx: 0, vy: 0, holder: null, rotation: 0, trail: [], isFireBall: false, isPerfectShot: false
         };
 
         const gravity = 0.5;
@@ -198,7 +199,7 @@ game_html = """
         }
 
         function attack(attacker, victim) {
-            attacker.stealAnim = 15; // 스틸 애니메이션 트리거
+            attacker.stealAnim = 15;
             const dist = Math.hypot((attacker.x + attacker.width/2) - (victim.x + victim.width/2), attacker.y - victim.y);
             attacker.vx = attacker.facing * 9;
 
@@ -220,26 +221,57 @@ game_html = """
                 if (!gameActive) return;
                 timeLeft--;
                 document.getElementById('timer').innerText = timeLeft;
-                if (timeLeft <= 0) endGame();
+                if (timeLeft <= 0) quarterEnded();
             }, 1000);
         }
 
-        function resetGame() {
-            p1Score = 0; p2Score = 0; timeLeft = GAME_TIME; gameActive = true;
-            document.getElementById('p1-score').innerText = 0;
-            document.getElementById('p2-score').innerText = 0;
-            document.getElementById('game-over').style.display = 'none';
-            resetRoundPositions(); startTimer();
+        function quarterEnded() {
+            clearInterval(timerInterval);
+            if (currentQuarter < 3) {
+                gameActive = false;
+                const modal = document.getElementById('game-over');
+                const title = document.getElementById('winner-text');
+                const btn = document.getElementById('restart-btn');
+                
+                title.innerText = `${currentQuarter}쿼터 종료!`;
+                title.style.color = "#ffea00";
+                btn.innerText = `${currentQuarter + 1}쿼터 시작!`;
+                modal.style.display = 'flex';
+            } else {
+                endGame();
+            }
+        }
+
+        function onBtnClick() {
+            const modal = document.getElementById('game-over');
+            modal.style.display = 'none';
+
+            if (currentQuarter >= 3 && !gameActive) {
+                currentQuarter = 1; p1Score = 0; p2Score = 0;
+                document.getElementById('p1-score').innerText = 0;
+                document.getElementById('p2-score').innerText = 0;
+            } else {
+                currentQuarter++;
+            }
+
+            const qNames = ["1st QTR", "2nd QTR", "3rd QTR"];
+            document.getElementById('q-text').innerText = qNames[currentQuarter - 1];
+
+            timeLeft = QTR_TIME;
+            document.getElementById('timer').innerText = timeLeft;
+            gameActive = true;
+            resetRoundPositions();
+            startTimer();
         }
 
         function resetRoundPositions() {
             p1.x = 200; p1.y = 340; p1.vx = 0; p1.vy = 0; p1.hasBall = false; p1.stunTimer = 0; p1.isCharging = false;
             p2.x = 710; p2.y = 340; p2.vx = 0; p2.vy = 0; p2.hasBall = false; p2.stunTimer = 0; p2.isCharging = false;
-            ball.x = 480; ball.y = 200; ball.vx = 0; ball.vy = 0; ball.holder = null; ball.trail = []; ball.isFireBall = false;
+            ball.x = 480; ball.y = 200; ball.vx = 0; ball.vy = 0; ball.holder = null; ball.trail = []; ball.isFireBall = false; ball.isPerfectShot = false;
         }
 
         function shootBall(player) {
-            player.shootAnim = 20; // 슛 애니메이션 트리거
+            player.shootAnim = 20;
             const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
             const dx = targetHoop.rimX - (player.x + player.width / 2);
             const dist = Math.abs(dx);
@@ -248,19 +280,26 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 15;
             ball.y = player.y - 30;
 
-            const isPerfect = player.gauge >= (player.isFire ? 30 : 50) && player.gauge <= (player.isFire ? 95 : 82);
+            // 초록색 게이지 영역: 45 ~ 75
+            const isGreenZone = player.gauge >= 45 && player.gauge <= 75;
 
-            if (isPerfect || player.isFire) {
-                ball.vx = (dx / dist) * (7.2 + dist * 0.006);
-                ball.vy = player.isFire ? -14.5 : -13.0;
+            if (isGreenZone || player.isFire) {
+                // 초록색 게이지 들어가면 거의 100% 무조건 골! (완벽 물리 궤적 계산)
+                ball.isPerfectShot = true;
                 ball.isFireBall = player.isFire;
-                playSound('fire'); screenShake = player.isFire ? 10 : 4;
-                addText(player.isFire ? "🔥 THREE POINTER!!" : "PERFECT SHOT!!", player.x, player.y - 40, '#ffea00', 1.4);
+
+                const timeToRim = 32; // 프레임
+                ball.vx = dx / timeToRim;
+                ball.vy = (targetHoop.rimY - 15 - ball.y - 0.5 * gravity * Math.pow(timeToRim, 2)) / timeToRim;
+
+                playSound('fire'); screenShake = player.isFire ? 10 : 5;
+                addText(player.isFire ? "🔥 ON FIRE 3PTS!" : "🎯 PERFECT SWISH!!", player.x, player.y - 40, '#00e676', 1.5);
             } else {
-                let err = (player.gauge - 65) * 0.08;
-                ball.vx = (dx / dist) * (6.5 + dist * 0.006) + err;
+                ball.isPerfectShot = false;
+                let err = (player.gauge - 60) * 0.12;
+                ball.vx = (dx / dist) * (6.5 + dist * 0.005) + err;
                 ball.vy = -12.0; playSound('bounce');
-                addText("AIR BALL?", player.x, player.y - 30, '#aaa', 1.0);
+                addText("MISS!", player.x, player.y - 30, '#aaa', 1.0);
             }
         }
 
@@ -270,13 +309,13 @@ game_html = """
 
             if (p.stunTimer > 0) { p.stunTimer--; p.vx *= 0.8; }
             else {
-                let speed = 5.5 + (p.isFire ? 2 : 0);
-                if (keys[leftKey]) { p.vx = -speed; p.facing = -1; p.walkCycle += 0.25; }
-                else if (keys[rightKey]) { p.vx = speed; p.facing = 1; p.walkCycle += 0.25; }
+                let speed = 5.8 + (p.isFire ? 2 : 0);
+                if (keys[leftKey]) { p.vx = -speed; p.facing = -1; p.walkCycle += 0.28; }
+                else if (keys[rightKey]) { p.vx = speed; p.facing = 1; p.walkCycle += 0.28; }
                 else { p.vx *= 0.7; p.walkCycle = 0; }
 
                 if (keys[jumpKey] && p.isGrounded) {
-                    p.vy = -12.5 - (p.isFire ? 2 : 0); p.isGrounded = false; playSound('bounce');
+                    p.vy = -12.8 - (p.isFire ? 2 : 0); p.isGrounded = false; playSound('bounce');
                 }
             }
 
@@ -290,7 +329,7 @@ game_html = """
             }
 
             if (p.isCharging && p.hasBall) {
-                p.gauge += p.gaugeDir * 4.5;
+                p.gauge += p.gaugeDir * 4.8;
                 if (p.gauge >= 100) { p.gauge = 100; p.gaugeDir = -1; }
                 if (p.gauge <= 0) { p.gauge = 0; p.gaugeDir = 1; }
             }
@@ -324,11 +363,11 @@ game_html = """
             hoops.forEach(hoop => {
                 const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
 
-                if (distToRim < 22 && distToRim > 12) {
+                if (!ball.isPerfectShot && distToRim < 22 && distToRim > 12) {
                     ball.vx *= -0.8; ball.vy *= -0.5; playSound('bounce'); screenShake = 3;
                 }
 
-                if (distToRim <= 12 && ball.vy > 0) {
+                if (distToRim <= 14 && ball.vy > 0) {
                     playSound('goal'); screenShake = 12;
                     addParticles(hoop.rimX, hoop.rimY, '#ffea00', 25);
 
@@ -345,7 +384,7 @@ game_html = """
                     document.getElementById('p1-combo').innerText = p1.isFire ? "🔥ON FIRE!" : "";
                     document.getElementById('p2-combo').innerText = p2.isFire ? "🔥ON FIRE!" : "";
 
-                    addText(ball.isFireBall ? "3PTS 🔥 GOAL!!" : "2PTS GOAL!!", hoop.rimX, hoop.rimY - 40, '#ffea00', 1.6);
+                    addText(ball.isFireBall ? "3PTS 🔥 SWISH!!" : "2PTS SWISH!!", hoop.rimX, hoop.rimY - 40, '#ffea00', 1.6);
                     resetRoundPositions();
                 }
             });
@@ -353,19 +392,22 @@ game_html = """
 
         function endGame() {
             gameActive = false; clearInterval(timerInterval); playSound('goal');
+            const modal = document.getElementById('game-over');
             const winnerText = document.getElementById('winner-text');
+            const btn = document.getElementById('restart-btn');
+
             if (p1Score > p2Score) { winnerText.innerText = "STEPH CURRY WINS!"; winnerText.style.color = "#ffc72c"; } 
             else if (p2Score > p1Score) { winnerText.innerText = "LEBRON JAMES WINS!"; winnerText.style.color = "#fdb927"; } 
             else { winnerText.innerText = "DRAW GAME!"; winnerText.style.color = "#ffffff"; }
 
             document.getElementById('final-p1').innerText = p1Score;
             document.getElementById('final-p2').innerText = p2Score;
-            document.getElementById('game-over').style.display = 'flex';
+            btn.innerText = "새 경기 시작!";
+            modal.style.display = 'flex';
         }
 
         function drawCourt() {
-            // 원목 마루 스타일 코트 바닥
-            ctx.fillStyle = '#2a1a08'; ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+            ctx.fillStyle = '#221508'; ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
             ctx.fillStyle = '#c5a059'; ctx.fillRect(0, groundY, canvas.width, 6);
 
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'; ctx.lineWidth = 4;
@@ -380,7 +422,7 @@ game_html = """
             });
         }
 
-        function drawPlayer(p) {
+        function drawCustomNBAPlayer(p) {
             ctx.save();
             const centerX = p.x + p.width / 2;
             ctx.translate(centerX, p.y);
@@ -391,70 +433,65 @@ game_html = """
             ctx.fillStyle = 'rgba(0,0,0,0.4)';
             ctx.beginPath(); ctx.ellipse(0, p.height, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
 
-            // --- 🏃‍♂️ 다리 (달리기 관절 모션) ---
+            // 다리 (달리기 애니메이션)
             const legSwing = Math.sin(p.walkCycle) * 14;
-            ctx.strokeStyle = '#e0ac69'; ctx.lineWidth = 8; ctx.lineCap = 'round';
-            
-            // 왼다리
+            ctx.strokeStyle = p.skinColor; ctx.lineWidth = 8; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(-6, 50); ctx.lineTo(-6 + legSwing, p.height - 2); ctx.stroke();
-            // 오른다리
             ctx.beginPath(); ctx.moveTo(6, 50); ctx.lineTo(6 - legSwing, p.height - 2); ctx.stroke();
 
-            // 신발 (농구화)
-            ctx.fillStyle = '#ffffff';
+            // 신발
+            ctx.fillStyle = p.secondaryColor;
             ctx.fillRect(-10 + legSwing, p.height - 4, 12, 6);
             ctx.fillRect(2 - legSwing, p.height - 4, 12, 6);
 
-            // --- 🎽 실제 NBA 유니폼 (상체 & 바지) ---
-            // 바지
-            ctx.fillStyle = p.primaryColor;
-            ctx.fillRect(-14, 38, 28, 16);
-            ctx.fillStyle = p.secondaryColor;
-            ctx.fillRect(-14, 50, 28, 4); // 바지 끝 단 줄무늬
+            // 유니폼
+            ctx.fillStyle = p.primaryColor; ctx.fillRect(-14, 38, 28, 16);
+            ctx.fillStyle = p.secondaryColor; ctx.fillRect(-14, 50, 28, 4);
 
-            // 상체 (유니폼 나시)
-            ctx.fillStyle = p.primaryColor;
-            ctx.fillRect(-13, 14, 26, 26);
-            
-            // 유니폼 등번호
-            ctx.fillStyle = p.secondaryColor;
-            ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+            ctx.fillStyle = p.primaryColor; ctx.fillRect(-13, 14, 26, 26);
+            ctx.fillStyle = p.secondaryColor; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
             ctx.fillText(p.number, 0, 32);
 
-            // --- 💪 팔 & 모션 (스틸 / 슛 모션) ---
-            ctx.strokeStyle = '#e0ac69'; ctx.lineWidth = 7;
-            
-            if (p.shootAnim > 0) { // 슛 모션: 팔을 만세하듯 위로 높이 들기
-                ctx.beginPath(); ctx.moveTo(-10, 18); ctx.lineTo(-14, -5); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(10, 18); ctx.lineTo(p.facing * 18, -10); ctx.stroke();
-            } else if (p.stealAnim > 0) { // 스틸 모션: 전방으로 팔을 크게 휘두름
+            // 팔 모션
+            ctx.strokeStyle = p.skinColor; ctx.lineWidth = 7;
+            if (p.shootAnim > 0) {
+                ctx.beginPath(); ctx.moveTo(-10, 18); ctx.lineTo(-14, -8); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(10, 18); ctx.lineTo(p.facing * 18, -12); ctx.stroke();
+            } else if (p.stealAnim > 0) {
                 ctx.beginPath(); ctx.moveTo(-10, 18); ctx.lineTo(p.facing * 30, 20); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(10, 18); ctx.lineTo(p.facing * 25, 28); ctx.stroke();
-            } else { // 기본 / 달리기 팔 흔들기 모션
+            } else {
                 ctx.beginPath(); ctx.moveTo(-10, 18); ctx.lineTo(-10 - legSwing * 0.8, 32); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(10, 18); ctx.lineTo(10 + legSwing * 0.8, 32); ctx.stroke();
             }
 
-            // --- 👤 실제 NBA 선수 얼굴 (이미지 렌더링) ---
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(0, -2, p.headRadius, 0, Math.PI * 2);
-            ctx.clip(); // 동그란 헤드샷 크롭
+            // 캐릭터 머리
+            ctx.fillStyle = p.skinColor;
+            ctx.beginPath(); ctx.arc(0, -2, p.headRadius, 0, Math.PI * 2); ctx.fill();
 
-            if (p.img.complete && p.img.naturalWidth !== 0) {
-                // 이미지 반전 (바라보는 방향)
-                if (p.facing === -1) { ctx.scale(-1, 1); }
-                ctx.drawImage(p.img, -p.headRadius - 5, -p.headRadius - 2, p.headRadius * 2.3, p.headRadius * 2.3);
-            } else {
-                ctx.fillStyle = '#e0ac69'; ctx.fill();
+            if (p.id === 1) { // STEPH CURRY
+                ctx.fillStyle = p.hairColor;
+                ctx.beginPath(); ctx.arc(0, -10, p.headRadius, Math.PI, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#5c3a1e';
+                ctx.fillRect(-8, 12, 16, 5); ctx.fillRect(-4, 8, 8, 4);
+                ctx.fillStyle = p.headbandColor; ctx.fillRect(-p.headRadius, -10, p.headRadius * 2, 6);
+            } else { // LEBRON JAMES
+                ctx.fillStyle = p.hairColor;
+                ctx.beginPath(); ctx.arc(0, -12, p.headRadius, Math.PI, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#1a0d00';
+                ctx.beginPath(); ctx.arc(0, 10, 14, 0, Math.PI); ctx.fill();
+                ctx.fillStyle = p.headbandColor; ctx.fillRect(-p.headRadius, -8, p.headRadius * 2, 7);
             }
-            ctx.restore();
 
-            // 머리 테두리
-            ctx.strokeStyle = p.secondaryColor; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(0, -2, p.headRadius, 0, Math.PI * 2); ctx.stroke();
+            // 표정
+            ctx.fillStyle = '#000';
+            if (p.stunTimer > 0) {
+                ctx.font = 'bold 12px Arial'; ctx.fillText('X X', p.facing * 4 - 8, 4);
+            } else {
+                ctx.fillRect(p.facing * 6, 0, 5, 5);
+                ctx.fillRect(p.facing * 6 - 2, -4, 8, 2);
+            }
 
-            // 🔥 ON FIRE 폭주 모드 오라
             if (p.isFire) {
                 ctx.strokeStyle = '#ffea00'; ctx.lineWidth = 4;
                 ctx.beginPath(); ctx.arc(0, -2, p.headRadius + 5 + Math.random()*4, 0, Math.PI * 2); ctx.stroke();
@@ -462,15 +499,17 @@ game_html = """
 
             ctx.restore();
 
-            // 🎯 슈팅 게이지
+            // 초록 게이지
             if (p.hasBall && p.isCharging) {
                 const gx = p.x + p.width / 2 - 35; const gy = p.y - 45;
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'; ctx.fillRect(gx, gy, 70, 8);
-                ctx.fillStyle = '#ff1744'; ctx.fillRect(gx, gy, 70, 8);
-                ctx.fillStyle = '#00e676'; ctx.fillRect(gx + 35, gy, 20, 8); // Perfect Zone
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'; ctx.fillRect(gx, gy, 70, 9);
+                ctx.fillStyle = '#ff1744'; ctx.fillRect(gx, gy, 70, 9);
+                
+                // PERFECT GREEN ZONE (45~75%)
+                ctx.fillStyle = '#00e676'; ctx.fillRect(gx + 31.5, gy, 21, 9);
 
                 const barX = gx + (p.gauge / 100) * 70;
-                ctx.fillStyle = '#ffffff'; ctx.fillRect(barX - 2, gy - 2, 4, 12);
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(barX - 2, gy - 2, 4, 13);
             }
         }
 
@@ -481,17 +520,12 @@ game_html = """
                 ctx.beginPath(); ctx.arc(t.x, t.y, ball.radius * ((i + 1) / 8), 0, Math.PI * 2); ctx.fill();
             }
 
-            ctx.save();
-            ctx.translate(ball.x, ball.y);
-            ctx.rotate(ball.rotation);
-
+            ctx.save(); ctx.translate(ball.x, ball.y); ctx.rotate(ball.rotation);
             ctx.fillStyle = ball.isFireBall ? '#ffea00' : '#ff8c00';
             ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fill();
-
             ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
             ctx.moveTo(-ball.radius, 0); ctx.lineTo(ball.radius, 0); ctx.stroke();
-
             ctx.restore();
         }
 
@@ -523,8 +557,8 @@ game_html = """
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawCourt();
-            drawPlayer(p1);
-            drawPlayer(p2);
+            drawCustomNBAPlayer(p1);
+            drawCustomNBAPlayer(p2);
             drawBall();
             drawUIEffects();
 
