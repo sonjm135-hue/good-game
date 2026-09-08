@@ -1,575 +1,511 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="The Backrooms: Multi-Level Escape", layout="wide")
+st.set_page_config(
+    page_title="🏀 Real Rule 2P Basketball with Block & Animations",
+    page_icon="🏀",
+    layout="wide"
+)
 
-game_html = """
-<!DOCTYPE html>
-<html lang="ko">
+st.title("🏀 Real Rule 2P Full Court Basketball")
+
+st.markdown("""
+### 🎮 실제 농구 규칙 & 애니메이션 적용
+* **🛡️ 완벽한 블락 시스템**: 수비수가 슛/덩크 타이밍에 블락(`Space` / `Enter`)하면 공이 튕겨나가며 **득점이 완전히 불인정**됩니다!
+* **🏀 단일 공 & 소유권**: 블락되거나 튀어 나간 공은 바닥에 떨어지며, 공에 먼저 닿는 플레이어가 공을 빼앗습니다.
+* **🏃 동작 애니메이션**: 달리기, 슛(체중 이동 & 팔 뻗기), 슬로우 모션 덩크, 블락 포즈 모션이 모두 구체화되었습니다.
+""")
+
+game_real_rule_html = """<!DOCTYPE html>
+<html>
 <head>
-    <meta charset="UTF-8">
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; color: #d4c883; user-select: none; }
-        #canvas-container { width: 100vw; height: 100vh; }
-        #ui-overlay {
-            position: absolute; top: 15px; left: 15px;
-            color: #e6dc9c; text-shadow: 2px 2px 4px #000;
-            pointer-events: none; font-size: 18px; z-index: 10;
+        body { margin: 0; padding: 0; background-color: #111; font-family: 'Impact', sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 75vh; display: flex; justify-content: center; align-items: center; position: relative; }
+        canvas { background: #181822; border: 4px solid #fff; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        
+        #hud {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 24px;
+            background: rgba(0,0,0,0.85); padding: 8px 24px; border-radius: 6px; border: 2px solid #555;
+            display: flex; gap: 30px; align-items: center;
         }
-        #start-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: #18160c; color: #e6dc9c; text-align: center; z-index: 20;
-        }
-        #start-btn {
-            margin-top: 25px; padding: 15px 50px; font-size: 26px; font-weight: bold;
-            color: #18160c; background-color: #c9b044; border: 2px solid #8c7823;
-            cursor: pointer; font-family: 'Courier New', monospace; letter-spacing: 2px;
-        }
-        #start-btn:hover { background-color: #e6dc9c; color: #000; }
-        #crosshair {
-            position: absolute; top: 50%; left: 50%;
-            width: 4px; height: 4px; background: rgba(255,255,255,0.8);
-            border-radius: 50%; transform: translate(-50%, -50%);
-            pointer-events: none; z-index: 10;
-        }
-        #end-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: none; justify-content: center; align-items: center;
-            flex-direction: column; z-index: 30; text-align: center;
+        #green-splash {
+            position: absolute; top: 25%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 42px; color: #2ecc71; text-shadow: 0 0 20px #2ecc71, 2px 2px #000;
+            opacity: 0; transition: opacity 0.2s; pointer-events: none; text-align: center;
         }
     </style>
 </head>
 <body>
-    <div id="canvas-container"></div>
-    <div id="crosshair"></div>
-    <div id="ui-overlay">
-        <div>📍 <span id="level-title" style="font-weight: bold; color: #ffffa0;">LEVEL 0: THE LOBBY</span></div>
-        <div>🔦 손전등: <span id="flashlight-status" style="color: #ffff00;">ON (F)</span> | 🧍 상태: <span id="crouch-status" style="color: #ffffff;">서있음 (C)</span></div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">[WASD] 이동 | [Q / E] 시점 회전 | [C] 숙이기 | [F] 손전등/습득</div>
-        <div id="game-status" style="color: #ffcc00; margin-top: 5px; font-weight: bold;">🎯 목표: 맵 구석의 아이템을 찾아 녹색 비상문으로 탈출하세요!</div>
-    </div>
-    
-    <div id="start-screen">
-        <h1 style="color: #d1b838; font-size: 60px; margin-bottom: 0px; letter-spacing: 6px;">THE BACKROOMS</h1>
-        <p style="font-size: 16px; color: #a39655; margin-top: 15px; max-width: 600px; line-height: 1.6;">
-            백룸의 깊은 층으로 떨어졌습니다.<br>
-            • <b>[WASD]로 이동</b>하고 <b>[Q] / [E] 키로 시점을 회전</b>하세요.<br>
-            • 레벨이 올라갈수록 <b>괴물이 훨씬 빠르고 기민</b>해집니다.<br>
-            • 사망 시 <b>3초 후 해당 레벨에서 다시 시작</b>합니다!
-        </p>
-        <button id="start-btn">NOCLIP IN</button>
+    <div id="canvas-container">
+        <div id="hud">
+            <div>1P (KOBE): <span id="score1" style="color:#f1c40f;">0</span></div>
+            <div style="font-size:18px; color:#aaa;">REAL RULE 1-ON-1</div>
+            <div>2P (JORDAN): <span id="score2" style="color:#e74c3c;">0</span></div>
+        </div>
+        <div id="green-splash">BLOCKED! NO GOAL! 🛡️</div>
+        <canvas id="gameCanvas" width="1100" height="500"></canvas>
     </div>
 
-    <div id="end-screen">
-        <h1 id="end-title" style="font-size: 70px; letter-spacing: 4px;">YOU DIED</h1>
-        <p id="end-desc" style="font-size: 18px; color: #aaa; margin-top: 10px;">괴물에게 잡혔습니다...</p>
-        <p id="respawn-timer" style="font-size: 16px; color: #ff5555; margin-top: 25px;">3초 후 다시 시작합니다...</p>
-    </div>
+<script>
+// Sound System
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(type) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        let scene, camera, renderer, flashlight;
-        let mainFluorescentLight, doorLight;
-        const keys = {};
-        let prevTime = performance.now();
+    if (type === 'swish') {
+        osc.frequency.setValueAtTime(520, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    } else if (type === 'block') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    }
+}
 
-        let currentLevel = 0;
-        const maxLevel = 3;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const greenSplash = document.getElementById('green-splash');
+const score1El = document.getElementById('score1');
+const score2El = document.getElementById('score2');
 
-        let isFlashlightOn = true;
-        let isCrouching = false;
-        let hasKey = false;
-        let gameStarted = false;
-        let gameOver = false;
-        let gameClear = false;
+let score1 = 0;
+let score2 = 0;
 
-        let keyMesh, exitDoorMesh, monsterMesh, monsterEyeMat;
-        let isChasing = false;
+// 양쪽 골대
+const hoops = {
+    left: { x: 80, y: 190, rimX: 115, rimY: 220, rimR: 16 },
+    right: { x: 1020, y: 190, rimX: 985, rimY: 220, rimR: 16 }
+};
 
-        let wallBoxes = [];
-        const holeBounds = { xMin: -11.0, xMax: -9.0, zMin: -8.0, zMax: 2.0 };
+// 단일 공 (Single Ball Physics)
+const ball = {
+    x: 200,
+    y: 390,
+    vx: 0,
+    vy: 0,
+    r: 10,
+    holder: 1, // 1: 1P, 2: 2P, null: 공중/바닥
+    isFlying: false,
+    isGreen: false,
+    isScored: false,
+    targetHoop: 'right'
+};
 
-        let waypoints = [];
-        let currentWaypointIndex = 0;
+function createPlayer(id, x, color1, color2, number, targetHoopKey) {
+    return {
+        id: id,
+        x: x,
+        y: 375,
+        w: 36,
+        h: 40,
+        vx: 0,
+        vy: 0,
+        color1: color1,
+        color2: color2,
+        number: number,
+        targetHoopKey: targetHoopKey,
+        isJumping: false,
+        isDunking: false,
+        dunkProgress: 0,
+        dunkScored: false,
+        isCharging: false,
+        power: 0,
+        animFrame: 0,
+        isMoving: false,
+        isBlocking: false,
+        blockCooldown: 0,
+        shootAnimTimer: 0 // 슛 모션 후폭풍 연출
+    };
+}
 
-        // 레벨별 난이도 차등 적용 (속도 및 감지 거리)
-        const levelThemes = [
-            { name: "LEVEL 0: THE LOBBY", bg: 0x2b2716, wall: 0xa89f5a, floor: 0x59522c, monsterSpeed: 3.5, detectDist: 14.0, monsterName: "Bacteria (쉬움)" },
-            { name: "LEVEL 1: HABITABLE ZONE", bg: 0x0a1014, wall: 0x2c3840, floor: 0x182026, monsterSpeed: 4.5, detectDist: 18.0, monsterName: "Smiler (보통)" },
-            { name: "LEVEL 2: PIPE DREAMS", bg: 0x1a0f0a, wall: 0x4a2e1d, floor: 0x29180e, monsterSpeed: 5.8, detectDist: 22.0, monsterName: "Skin-Stealer (어려움)" },
-            { name: "LEVEL 3: ELECTRICAL STATION", bg: 0x080808, wall: 0x222222, floor: 0x111111, monsterSpeed: 7.2, detectDist: 26.0, monsterName: "Hound (매우 어려움)" }
-        ];
+const p1 = createPlayer(1, 200, '#fdb927', '#552583', '24', 'right');
+const p2 = createPlayer(2, 900, '#ce1141', '#111111', '23', 'left');
 
-        const startScreen = document.getElementById('start-screen');
-        const startBtn = document.getElementById('start-btn');
-        const flashlightStatus = document.getElementById('flashlight-status');
-        const crouchStatus = document.getElementById('crouch-status');
-        const gameStatus = document.getElementById('game-status');
-        const levelTitle = document.getElementById('level-title');
-        const endScreen = document.getElementById('end-screen');
-        const endTitle = document.getElementById('end-title');
-        const endDesc = document.getElementById('end-desc');
-        const respawnTimer = document.getElementById('respawn-timer');
-        const container = document.getElementById('canvas-container');
+const keys = {};
 
-        function init() {
-            scene = new THREE.Scene();
+window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    if (e.key === 'ArrowLeft') keys['arrowleft'] = true;
+    if (e.key === 'ArrowRight') keys['arrowright'] = true;
+    if (e.key === 'ArrowUp') keys['arrowup'] = true;
+    if (e.key === 'Enter') keys['enter'] = true;
+    if (e.code === 'Space') keys['space'] = true;
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 25);
-            camera.rotation.order = 'YXZ';
+    if (k === 'f' && ball.holder === 1) handleShootOrDunkPress(p1);
+    if (k === 'l' && ball.holder === 2) handleShootOrDunkPress(p2);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            container.appendChild(renderer.domElement);
+    if (e.code === 'Space' && ball.holder === 2) triggerBlock(p1, p2);
+    if (e.key === 'Enter' && ball.holder === 1) triggerBlock(p2, p1);
+});
 
-            flashlight = new THREE.SpotLight(0xfff8d6, 6, 40, Math.PI / 3.5, 0.5, 1);
-            camera.add(flashlight);
-            flashlight.position.set(0, 0, 0);
-            flashlight.target.position.set(0, 0, -1);
-            camera.add(flashlight.target);
+window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    keys[k] = false;
+    if (e.key === 'ArrowLeft') keys['arrowleft'] = false;
+    if (e.key === 'ArrowRight') keys['arrowright'] = false;
+    if (e.key === 'ArrowUp') keys['arrowup'] = false;
+    if (e.key === 'Enter') keys['enter'] = false;
+    if (e.code === 'Space') keys['space'] = false;
 
-            loadLevel(0);
+    if (k === 'f' && ball.holder === 1) releaseShoot(p1);
+    if (k === 'l' && ball.holder === 2) releaseShoot(p2);
+});
 
-            window.addEventListener('keydown', (e) => {
-                keys[e.code] = true;
-                if (e.code === 'KeyF') interact();
-                if (e.code === 'KeyC') toggleCrouch();
-            });
+// 블락 시스템 (실제 농구 규칙 적용: 공이 튕겨나가며 득점 미인정)
+function triggerBlock(defender, attacker) {
+    if (defender.blockCooldown > 0) return;
 
-            window.addEventListener('keyup', (e) => {
-                keys[e.code] = false;
-            });
+    defender.isBlocking = true;
+    defender.blockCooldown = 40;
+    setTimeout(() => { defender.isBlocking = false; }, 350);
 
-            startBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                startScreen.style.display = 'none';
-                gameStarted = true;
-                window.focus();
-            });
+    const dist = Math.hypot(defender.x - attacker.x, defender.y - attacker.y);
 
-            animate();
+    if (dist < 65 && (attacker.isCharging || attacker.isDunking || attacker.isJumping || ball.holder === attacker.id)) {
+        triggerSplash("REJECTED! BLOCKED! 🛡️ (NO GOAL)");
+        playSound('block');
+
+        // 공격 및 덩크 상태 즉시 해제 (득점 취소)
+        attacker.isCharging = false;
+        attacker.isDunking = false;
+        attacker.dunkScored = true; // 덩크 득점 방지 플래그
+
+        // 공 떨어뜨리기 (바닥으로 튕김)
+        ball.holder = null;
+        ball.isFlying = true;
+        ball.isScored = true; // 불인정 처리
+        ball.vx = (defender.x < attacker.x) ? -7 : 7;
+        ball.vy = -6;
+    }
+}
+
+function handleShootOrDunkPress(p) {
+    const targetRimX = hoops[p.targetHoopKey].rimX;
+    const isNearHoop = Math.abs(p.x - targetRimX) < 220;
+
+    if (isNearHoop && p.isMoving && !p.isDunking) {
+        p.isDunking = true;
+        p.dunkProgress = 0;
+        p.dunkScored = false;
+        p.isJumping = true;
+        p.isCharging = false;
+    } else if (!p.isCharging && !p.isDunking) {
+        p.isCharging = true;
+        p.power = 0;
+    }
+}
+
+function releaseShoot(p) {
+    if (p.isCharging && !p.isDunking) {
+        shootBall(p);
+        p.isCharging = false;
+        p.shootAnimTimer = 15; // 슛 한 직후 팔 뻗는 모션
+    }
+}
+
+function triggerSplash(text) {
+    greenSplash.innerText = text;
+    greenSplash.style.opacity = '1';
+    setTimeout(() => { greenSplash.style.opacity = '0'; }, 1300);
+}
+
+function shootBall(p) {
+    ball.holder = null;
+    ball.isFlying = true;
+    ball.isScored = false;
+    ball.targetHoop = p.targetHoopKey;
+
+    const hoop = hoops[p.targetHoopKey];
+    let isGreen = false;
+
+    if (p.power >= 70 && p.power <= 88) {
+        isGreen = true;
+        const startX = p.x + 20;
+        const startY = p.y - 15;
+        const targetX = hoop.rimX;
+        const targetY = hoop.rimY;
+
+        const gravity = 0.42;
+        const time = 38;
+        ball.vx = (targetX - startX) / time;
+        ball.vy = (targetY - startY - 0.5 * gravity * time * time) / time;
+    } else {
+        const dir = p.targetHoopKey === 'right' ? 1 : -1;
+        ball.vx = dir * (6 + (p.power / 100) * 8);
+        ball.vy = -8 - (p.power / 100) * 4;
+    }
+
+    ball.isGreen = isGreen;
+}
+
+// 득점 후 실점팀에게 공 주어짐
+function resetAfterScore(scoredPlayerId) {
+    p1.isDunking = false; p2.isDunking = false;
+    p1.isCharging = false; p2.isCharging = false;
+
+    if (scoredPlayerId === 1) { // 1P 득점 -> 2P 실점 후 인바운드
+        p1.x = 800; p1.y = 375;
+        p2.x = 180; p2.y = 375;
+        ball.holder = 2;
+    } else { // 2P 득점 -> 1P 실점 후 인바운드
+        p1.x = 920; p1.y = 375;
+        p2.x = 300; p2.y = 375;
+        ball.holder = 1;
+    }
+    ball.isFlying = false;
+    ball.vx = 0; ball.vy = 0;
+}
+
+function updatePlayer(p, leftKey, rightKey, jumpKey) {
+    p.isMoving = false;
+    if (p.blockCooldown > 0) p.blockCooldown--;
+    if (p.shootAnimTimer > 0) p.shootAnimTimer--;
+
+    if (p.isDunking) {
+        const hoop = hoops[p.targetHoopKey];
+        p.dunkProgress += 0.018;
+
+        const startX = p.targetHoopKey === 'right' ? hoop.rimX - 180 : hoop.rimX + 180;
+        p.x = startX + p.dunkProgress * (hoop.rimX - startX);
+        p.y = 375 - Math.sin(p.dunkProgress * Math.PI) * 160;
+
+        if (p.dunkProgress >= 0.88 && !p.dunkScored) {
+            p.dunkScored = true;
+            if (p.id === 1) score1 += 2; else score2 += 2;
+            score1El.innerText = score1;
+            score2El.innerText = score2;
+
+            triggerSplash(`${p.id === 1 ? 'KOBE' : 'JORDAN'} POWER DUNK! 🔥`);
+            playSound('swish');
+
+            setTimeout(() => resetAfterScore(p.id), 800);
         }
 
-        function loadLevel(levelIdx) {
-            currentLevel = levelIdx;
-            hasKey = false;
-            isChasing = false;
-            gameOver = false;
-            wallBoxes = [];
-            endScreen.style.display = 'none';
-            
-            while(scene.children.length > 0){ 
-                scene.remove(scene.children[0]); 
-            }
-
-            const theme = levelThemes[currentLevel];
-            levelTitle.innerText = theme.name;
-            scene.background = new THREE.Color(theme.bg);
-            scene.fog = new THREE.FogExp2(theme.bg, 0.025);
-
-            scene.add(camera);
-
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-            scene.add(ambientLight);
-
-            mainFluorescentLight = new THREE.PointLight(0xfff5c0, 1.5, 80);
-            mainFluorescentLight.position.set(0, 4.8, 0);
-            scene.add(mainFluorescentLight);
-
-            const floorGeo = new THREE.PlaneGeometry(80, 80);
-            const floorMat = new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.8 });
-            const floor = new THREE.Mesh(floorGeo, floorMat);
-            floor.rotation.x = -Math.PI / 2;
-            scene.add(floor);
-
-            const ceilGeo = new THREE.PlaneGeometry(80, 80);
-            const ceilMat = new THREE.MeshStandardMaterial({ color: theme.bg });
-            const ceil = new THREE.Mesh(ceilGeo, ceilMat);
-            ceil.position.y = 5.0;
-            ceil.rotation.x = Math.PI / 2;
-            scene.add(ceil);
-
-            buildLevelMaze(currentLevel, theme.wall);
-
-            const doorGeo = new THREE.BoxGeometry(2.5, 4.0, 0.2);
-            const doorMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
-            exitDoorMesh = new THREE.Mesh(doorGeo, doorMat);
-            exitDoorMesh.position.set(0, 2.0, 38.8);
-            scene.add(exitDoorMesh);
-
-            doorLight = new THREE.PointLight(0xff0000, 3, 10);
-            doorLight.position.set(0, 4.0, 37.5);
-            scene.add(doorLight);
-
-            const keyGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 8);
-            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0x888800 });
-            keyMesh = new THREE.Mesh(keyGeo, keyMat);
-            keyMesh.position.set(32, 0.6, -32);
-            scene.add(keyMesh);
-
-            createMonsterForLevel(currentLevel);
-
-            camera.position.set(0, 1.6, 32);
-            camera.rotation.set(0, 0, 0);
-            gameStatus.innerText = `🎯 [${theme.name}] 구석의 아몬드 워터를 찾은 후 비상문으로 탈출하세요!`;
-            gameStatus.style.color = "#ffcc00";
+        if (p.dunkProgress >= 1.0) {
+            p.isDunking = false;
+            p.y = 375;
+            p.isJumping = false;
+        }
+    } else {
+        if (keys[leftKey]) { p.x -= 4; p.isMoving = true; }
+        if (keys[rightKey]) { p.x += 4; p.isMoving = true; }
+        if (keys[jumpKey] && !p.isJumping) {
+            p.vy = -11;
+            p.isJumping = true;
         }
 
-        function createWall(x, y, z, w, h, d, color) {
-            const wallMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
-            const geo = new THREE.BoxGeometry(w, h, d);
-            const wall = new THREE.Mesh(geo, wallMat);
-            wall.position.set(x, y, z);
-            scene.add(wall);
+        p.y += p.vy;
+        p.vy += 0.55;
 
-            const box = new THREE.Box3().setFromObject(wall);
-            wallBoxes.push(box);
+        if (p.y >= 375) {
+            p.y = 375;
+            p.isJumping = false;
         }
 
-        function buildLevelMaze(level, wallColor) {
-            createWall(0, 2.5, -39.5, 80, 5, 0.8, wallColor);
-            createWall(0, 2.5, 39.5, 80, 5, 0.8, wallColor);
-            createWall(-39.5, 2.5, 0, 0.8, 5, 80, wallColor);
-            createWall(39.5, 2.5, 0, 0.8, 5, 80, wallColor);
+        if (p.x < 30) p.x = 30;
+        if (p.x > 1030) p.x = 1030;
+    }
 
-            if (level === 0) {
-                createWall(15, 2.5, -15, 0.8, 5, 40, wallColor);
-                createWall(-15, 2.5, 15, 40, 5, 0.8, wallColor);
-                createWall(20, 2.5, 15, 0.8, 5, 30, wallColor);
-                createWall(-20, 2.5, -15, 30, 5, 0.8, wallColor);
-                createWall(0, 2.5, -25, 0.8, 5, 30, wallColor);
+    if (p.isMoving || p.isJumping) p.animFrame += 0.25;
+    if (p.isCharging) p.power = Math.min(100, p.power + 2.3);
+}
 
-                waypoints = [
-                    new THREE.Vector3(-30, 0, -30),
-                    new THREE.Vector3(30, 0, -30),
-                    new THREE.Vector3(30, 0, 30),
-                    new THREE.Vector3(-30, 0, 30)
-                ];
-            } else if (level === 1) {
-                createWall(-10, 2.5, 0, 0.8, 5, 60, wallColor);
-                createWall(10, 2.5, 0, 0.8, 5, 60, wallColor);
-                createWall(-25, 2.5, -20, 30, 5, 0.8, wallColor);
-                createWall(25, 2.5, 20, 30, 5, 0.8, wallColor);
+function update() {
+    updatePlayer(p1, 'a', 'd', 'w');
+    updatePlayer(p2, 'arrowleft', 'arrowright', 'arrowup');
 
-                waypoints = [
-                    new THREE.Vector3(0, 0, -30),
-                    new THREE.Vector3(0, 0, 30),
-                    new THREE.Vector3(25, 0, 0),
-                    new THREE.Vector3(-25, 0, 0)
-                ];
-            } else if (level === 2) {
-                createWall(0, 2.5, 10, 50, 5, 0.8, wallColor);
-                createWall(-10, 2.5, -10, 50, 5, 0.8, wallColor);
-                createWall(20, 2.5, -25, 0.8, 5, 30, wallColor);
-                createWall(-20, 2.5, 25, 0.8, 5, 30, wallColor);
+    // 공 물리 및 루즈볼 잡기
+    if (ball.holder === 1) {
+        ball.x = p1.x + (p1.targetHoopKey === 'right' ? 28 : -8);
+        ball.y = p1.y + 12;
+    } else if (ball.holder === 2) {
+        ball.x = p2.x + (p2.targetHoopKey === 'left' ? -8 : 28);
+        ball.y = p2.y + 12;
+    } else if (ball.isFlying) {
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+        ball.vy += 0.42;
 
-                waypoints = [
-                    new THREE.Vector3(-30, 0, 20),
-                    new THREE.Vector3(30, 0, -20),
-                    new THREE.Vector3(0, 0, -30),
-                    new THREE.Vector3(0, 0, 30)
-                ];
-            } else if (level === 3) {
-                createWall(-15, 2.5, 0, 0.8, 5, 40, wallColor);
-                createWall(15, 2.5, 0, 0.8, 5, 40, wallColor);
-                createWall(0, 2.5, -15, 30, 5, 0.8, wallColor);
-                createWall(0, 2.5, 15, 30, 5, 0.8, wallColor);
-                createWall(-25, 2.5, -25, 20, 5, 0.8, wallColor);
-                createWall(25, 2.5, 25, 20, 5, 0.8, wallColor);
-
-                waypoints = [
-                    new THREE.Vector3(-30, 0, -30),
-                    new THREE.Vector3(30, 0, -30),
-                    new THREE.Vector3(30, 0, 30),
-                    new THREE.Vector3(-30, 0, 30)
-                ];
-            }
-
-            createWall(-10, 3.1, -3, 20, 3.8, 0.8, wallColor);
+        if (ball.y >= 410) {
+            ball.y = 410;
+            ball.vy *= -0.55;
+            ball.vx *= 0.8;
         }
 
-        function createMonsterForLevel(level) {
-            monsterMesh = new THREE.Group();
+        // 떨어진 공 다시 줍기
+        const d1 = Math.hypot(ball.x - (p1.x + 18), ball.y - p1.y);
+        const d2 = Math.hypot(ball.x - (p2.x + 18), ball.y - p2.y);
+        if (d1 < 38) { ball.holder = 1; ball.isFlying = false; }
+        else if (d2 < 38) { ball.holder = 2; ball.isFlying = false; }
 
-            if (level === 0) {
-                const bodyGeo = new THREE.CylinderGeometry(0.3, 0.4, 3.2, 6);
-                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 });
-                const body = new THREE.Mesh(bodyGeo, bodyMat);
-                body.position.y = 1.6;
-                monsterMesh.add(body);
+        // 링 통과 (득점)
+        const hoop = hoops[ball.targetHoop];
+        const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
 
-                const eyeGeo = new THREE.SphereGeometry(0.12, 6, 6);
-                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                const eye1 = new THREE.Mesh(eyeGeo, monsterEyeMat);
-                const eye2 = new THREE.Mesh(eyeGeo, monsterEyeMat);
-                eye1.position.set(-0.15, 2.9, -0.25);
-                eye2.position.set(0.15, 2.9, -0.25);
-                monsterMesh.add(eye1);
-                monsterMesh.add(eye2);
+        if (distToRim < hoop.rimR && ball.vy > 0 && !ball.isScored) {
+            ball.isScored = true;
+            const scorerId = (ball.targetHoop === 'right') ? 1 : 2;
+            if (scorerId === 1) score1 += 2; else score2 += 2;
+            score1El.innerText = score1;
+            score2El.innerText = score2;
 
-            } else if (level === 1) {
-                const faceGeo = new THREE.SphereGeometry(1.2, 16, 16);
-                const faceMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
-                const face = new THREE.Mesh(faceGeo, faceMat);
-                face.position.y = 1.8;
-                monsterMesh.add(face);
+            triggerSplash(ball.isGreen ? "PERFECT GREEN RELEASE! 🔥" : "SWISH! GOAL! 🔥");
+            playSound('swish');
 
-                const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
-                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-                const eye1 = new THREE.Mesh(eyeGeo, monsterEyeMat);
-                const eye2 = new THREE.Mesh(eyeGeo, monsterEyeMat);
-                eye1.position.set(-0.4, 2.0, -1.0);
-                eye2.position.set(0.4, 2.0, -1.0);
-                monsterMesh.add(eye1);
-                monsterMesh.add(eye2);
-
-            } else if (level === 2) {
-                const bodyGeo = new THREE.BoxGeometry(0.8, 2.2, 0.5);
-                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3d2011, roughness: 0.9 });
-                const body = new THREE.Mesh(bodyGeo, bodyMat);
-                body.position.y = 1.5;
-                monsterMesh.add(body);
-
-                const armGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.5);
-                const arm1 = new THREE.Mesh(armGeo, bodyMat);
-                const arm2 = new THREE.Mesh(armGeo, bodyMat);
-                arm1.position.set(-0.6, 1.2, -0.2);
-                arm1.rotation.z = Math.PI / 4;
-                arm2.position.set(0.6, 1.2, -0.2);
-                arm2.rotation.z = -Math.PI / 4;
-                monsterMesh.add(arm1);
-                monsterMesh.add(arm2);
-
-                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-                const headGeo = new THREE.SphereGeometry(0.25, 8, 8);
-                const head = new THREE.Mesh(headGeo, monsterEyeMat);
-                head.position.set(0, 2.6, -0.2);
-                monsterMesh.add(head);
-
-            } else if (level === 3) {
-                const bodyGeo = new THREE.BoxGeometry(0.9, 0.7, 2.2);
-                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
-                const body = new THREE.Mesh(bodyGeo, bodyMat);
-                body.position.y = 0.6;
-                monsterMesh.add(body);
-
-                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-                const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
-                const eye = new THREE.Mesh(eyeGeo, monsterEyeMat);
-                eye.position.set(0, 0.8, -1.1);
-                monsterMesh.add(eye);
-            }
-
-            monsterMesh.position.copy(waypoints[0]);
-            scene.add(monsterMesh);
+            setTimeout(() => resetAfterScore(scorerId), 800);
         }
+    }
+}
 
-        function toggleCrouch() {
-            if (gameOver || gameClear) return;
-            isCrouching = !isCrouching;
-            crouchStatus.innerText = isCrouching ? "숙임 (C)" : "서있음 (C)";
-            crouchStatus.style.color = isCrouching ? "#ffaa00" : "#ffffff";
-        }
+// 애니메이션이 강화된 플레이어 그리기
+function drawPlayer(p) {
+    const runBounce = p.isMoving ? Math.sin(p.animFrame * 2) * 3 : 0;
+    const legAngle = Math.sin(p.animFrame) * 18;
+    const armAngle = Math.cos(p.animFrame) * 20;
 
-        function interact() {
-            if (gameOver || gameClear) return;
+    const bodyY = p.y + runBounce;
 
-            const distKey = keyMesh ? camera.position.distanceTo(keyMesh.position) : 999;
+    // 1. 다리 걷기/뛰기 애니메이션
+    ctx.fillStyle = '#3d2314';
+    ctx.save();
+    ctx.translate(p.x + 9, bodyY + 34);
+    ctx.rotate((p.isMoving ? legAngle : 0) * Math.PI / 180);
+    ctx.fillRect(-3, 0, 6, 11);
+    ctx.fillStyle = '#fff'; ctx.fillRect(-4, 9, 8, 4);
+    ctx.restore();
 
-            if (!hasKey && keyMesh && distKey < 4.0) {
-                hasKey = true;
-                scene.remove(keyMesh);
-                exitDoorMesh.material.color.setHex(0x00ff00);
-                doorLight.color.setHex(0x00ff00);
-                gameStatus.innerText = "🔑 아이템 습득 완료! 비상탈출문으로 이동하세요!";
-                gameStatus.style.color = "#00ff00";
-            } else {
-                isFlashlightOn = !isFlashlightOn;
-                flashlight.visible = isFlashlightOn;
-                flashlightStatus.innerText = isFlashlightOn ? "ON (F)" : "OFF (F)";
-                flashlightStatus.style.color = isFlashlightOn ? "#ffff00" : "#888888";
-            }
-        }
+    ctx.fillStyle = '#3d2314';
+    ctx.save();
+    ctx.translate(p.x + 27, bodyY + 34);
+    ctx.rotate((p.isMoving ? -legAngle : 0) * Math.PI / 180);
+    ctx.fillRect(-3, 0, 6, 11);
+    ctx.fillStyle = '#fff'; ctx.fillRect(-4, 9, 8, 4);
+    ctx.restore();
 
-        function checkWallCollision(targetPos, radius = 0.6) {
-            const playerBox = new THREE.Box3(
-                new THREE.Vector3(targetPos.x - radius, 0, targetPos.z - radius),
-                new THREE.Vector3(targetPos.x + radius, 4.0, targetPos.z + radius)
-            );
+    // 2. 몸통 (유니폼)
+    ctx.fillStyle = p.color1;
+    ctx.fillRect(p.x, bodyY, p.w, 24);
+    ctx.fillStyle = p.color2;
+    ctx.fillRect(p.x, bodyY + 24, p.w, 10);
 
-            for (let i = 0; i < wallBoxes.length; i++) {
-                if (playerBox.intersectsBox(wallBoxes[i])) {
-                    return true;
-                }
-            }
-            return false;
-        }
+    ctx.fillStyle = p.color2;
+    ctx.font = 'bold 12px Impact';
+    ctx.fillText(p.number, p.x + 11, bodyY + 17);
 
-        // 사망 처리 및 3초 카운트다운 후 재시작 함수
-        function handlePlayerDeath() {
-            gameOver = true;
-            endScreen.style.display = 'flex';
-            endScreen.style.background = '#110000';
-            endTitle.innerText = "YOU DIED";
-            endTitle.style.color = "#8b0000";
-            endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 ${levelThemes[currentLevel].monsterName}에게 잡혔습니다...`;
+    // 3. 팔 & 슛/덩크/블락 모션 애니메이션
+    ctx.fillStyle = '#3d2314';
 
-            let countdown = 3;
-            respawnTimer.style.display = 'block';
-            respawnTimer.innerText = `${countdown}초 후 다시 시작합니다...`;
+    if (p.isBlocking) { // 블락 모션 (양손 하늘로)
+        ctx.fillRect(p.x - 4, bodyY - 16, 6, 22);
+        ctx.fillRect(p.x + 34, bodyY - 16, 6, 22);
+    } else if (p.isDunking) { // 덩크 모션 (한 손 위로 강하게)
+        const dunkDir = p.targetHoopKey === 'right' ? 32 : -6;
+        ctx.fillRect(p.x + dunkDir, bodyY - 18, 7, 22);
+    } else if (p.isCharging) { // 슛 모으는 모션 (팔을 뒤로 젖힘)
+        ctx.fillRect(p.x + 6, bodyY - 10, 6, 16);
+        ctx.fillRect(p.x + 24, bodyY - 10, 6, 16);
+    } else if (p.shootAnimTimer > 0) { // 슛 쏜 직후 팔 뻗는 모션 (Follow-through)
+        const shootDir = p.targetHoopKey === 'right' ? 34 : -8;
+        ctx.fillRect(p.x + shootDir, bodyY - 15, 6, 20);
+    } else { // 기본 런 애니메이션
+        ctx.save();
+        ctx.translate(p.x - 2, bodyY + 8);
+        ctx.rotate((p.isMoving ? -armAngle : 0) * Math.PI / 180);
+        ctx.fillRect(-3, 0, 6, 12);
+        ctx.restore();
 
-            const timerInterval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) {
-                    respawnTimer.innerText = `${countdown}초 후 다시 시작합니다...`;
-                } else {
-                    clearInterval(timerInterval);
-                    loadLevel(currentLevel); // 현재 레벨 다시 로드
-                }
-            }, 1000);
-        }
+        ctx.save();
+        ctx.translate(p.x + 38, bodyY + 8);
+        ctx.rotate((p.isMoving ? armAngle : 0) * Math.PI / 180);
+        ctx.fillRect(-3, 0, 6, 12);
+        ctx.restore();
+    }
 
-        function animate() {
-            requestAnimationFrame(animate);
+    // 4. 머리
+    ctx.fillStyle = '#3d2314';
+    ctx.beginPath();
+    ctx.arc(p.x + 18, bodyY - 14, 18, 0, Math.PI * 2);
+    ctx.fill();
 
-            if (!gameStarted || gameOver || gameClear) {
-                renderer.render(scene, camera);
-                return;
-            }
+    // 5. 슛 게이지 HUD
+    if (p.isCharging) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(p.x - 8, bodyY - 58, 52, 11);
+        ctx.fillStyle = '#2ecc71';
+        ctx.fillRect(p.x + 28, bodyY - 58, 9, 11);
+        const isGreenZone = p.power >= 70 && p.power <= 88;
+        ctx.fillStyle = isGreenZone ? '#2ecc71' : '#f39c12';
+        ctx.fillRect(p.x - 8, bodyY - 58, (p.power / 100) * 52, 11);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+        ctx.strokeRect(p.x - 8, bodyY - 58, 52, 11);
+    }
+}
 
-            const time = performance.now();
-            const delta = (time - prevTime) / 1000;
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Q, E 키 시점 좌우 회전
-            const rotateSpeed = 1.8 * delta;
-            if (keys['KeyQ']) camera.rotation.y += rotateSpeed;
-            if (keys['KeyE']) camera.rotation.y -= rotateSpeed;
+    // 풀코트
+    ctx.fillStyle = '#c85a17';
+    ctx.fillRect(0, 415, 1100, 85);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 413, 1100, 4);
 
-            if (Math.random() < 0.03) {
-                mainFluorescentLight.intensity = Math.random() * 0.8 + 0.2;
-            } else {
-                mainFluorescentLight.intensity = 1.5;
-            }
+    // 센터 라인
+    ctx.fillRect(548, 413, 4, 87);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(550, 415, 70, Math.PI, 2 * Math.PI);
+    ctx.stroke();
 
-            const targetY = isCrouching ? 0.7 : 1.6;
-            camera.position.y += (targetY - camera.position.y) * 10.0 * delta;
+    // 양쪽 백보드 및 림
+    ['left', 'right'].forEach(key => {
+        const h = hoops[key];
+        const isLeft = key === 'left';
+        ctx.fillStyle = '#222';
+        ctx.fillRect(isLeft ? 60 : 1020, 190, 12, 225);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillRect(isLeft ? 70 : 1010, 140, 10, 100);
+        ctx.strokeStyle = '#ce1141';
+        ctx.strokeRect(isLeft ? 72 : 1012, 170, 6, 40);
+        ctx.strokeStyle = '#e67e22';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(h.rimX, h.rimY);
+        ctx.lineTo(isLeft ? 75 : 1015, h.rimY);
+        ctx.stroke();
+    });
 
-            const moveSpeed = (isCrouching ? 3.0 : 6.0) * delta;
-            
-            const forwardDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            forwardDir.y = 0; forwardDir.normalize();
+    drawPlayer(p1);
+    drawPlayer(p2);
 
-            const sideDir = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-            sideDir.y = 0; sideDir.normalize();
+    // 농구공
+    ctx.fillStyle = '#e67e22';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+    ctx.stroke();
+}
 
-            let moveVector = new THREE.Vector3();
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
 
-            // WASD 표준 이동 (S 키는 뒤로 이동)
-            if (keys['KeyW'] || keys['ArrowUp']) moveVector.addScaledVector(forwardDir, moveSpeed);
-            if (keys['KeyS'] || keys['ArrowDown']) moveVector.addScaledVector(forwardDir, -moveSpeed);
-            if (keys['KeyA'] || keys['ArrowLeft']) moveVector.addScaledVector(sideDir, -moveSpeed);
-            if (keys['KeyD'] || keys['ArrowRight']) moveVector.addScaledVector(sideDir, moveSpeed);
-
-            const nextPosX = new THREE.Vector3(camera.position.x + moveVector.x, camera.position.y, camera.position.z);
-            if (!checkWallCollision(nextPosX)) {
-                camera.position.x = nextPosX.x;
-            }
-
-            const nextPosZ = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z + moveVector.z);
-            if (!checkWallCollision(nextPosZ)) {
-                camera.position.z = nextPosZ.z;
-            }
-
-            // 개구멍 판정
-            if (
-                camera.position.x > holeBounds.xMin && camera.position.x < holeBounds.xMax &&
-                camera.position.z > holeBounds.zMin && camera.position.z < holeBounds.zMax
-            ) {
-                if (camera.position.y > 1.0) {
-                    camera.position.z += (camera.position.z > -3 ? 0.2 : -0.2);
-                }
-            }
-
-            // [괴물 AI & 난이도 시스템]
-            const distToPlayer = monsterMesh.position.distanceTo(camera.position);
-            const theme = levelThemes[currentLevel];
-            const currentSpeed = theme.monsterSpeed;
-            const detectDist = theme.detectDist;
-
-            if (isFlashlightOn && distToPlayer < detectDist) {
-                if (!isChasing) {
-                    isChasing = true;
-                    if(monsterEyeMat) monsterEyeMat.color.setHex(0xff0000);
-                    gameStatus.innerText = `🚨 [${theme.monsterName}] 괴물이 당신을 추격합니다!`;
-                    gameStatus.style.color = "#ff0000";
-                }
-            } else if (!isFlashlightOn && distToPlayer > (detectDist - 4.0)) {
-                if (isChasing) {
-                    isChasing = false;
-                    if(monsterEyeMat) monsterEyeMat.color.setHex(0xffffff);
-                    gameStatus.innerText = "⚠️ 괴물이 추적을 멈췄습니다.";
-                    gameStatus.style.color = "#ffaa00";
-                }
-            }
-
-            if (isChasing) {
-                const dir = new THREE.Vector3().subVectors(camera.position, monsterMesh.position);
-                dir.y = 0;
-                dir.normalize();
-                
-                const nextMonsterPos = monsterMesh.position.clone().addScaledVector(dir, currentSpeed * delta);
-                if (!checkWallCollision(nextMonsterPos, 0.4)) {
-                    monsterMesh.position.copy(nextMonsterPos);
-                }
-                monsterMesh.lookAt(camera.position.x, monsterMesh.position.y, camera.position.z);
-            } else {
-                const targetWaypoint = waypoints[currentWaypointIndex];
-                const dir = new THREE.Vector3().subVectors(targetWaypoint, monsterMesh.position);
-                dir.y = 0;
-                const distToWaypoint = dir.length();
-
-                if (distToWaypoint < 1.0) {
-                    currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.length;
-                } else {
-                    dir.normalize();
-                    monsterMesh.position.addScaledVector(dir, 2.5 * delta);
-                    monsterMesh.lookAt(targetWaypoint.x, monsterMesh.position.y, targetWaypoint.z);
-                }
-            }
-
-            // [사망 체크]
-            if (distToPlayer < 1.8) {
-                handlePlayerDeath();
-            }
-
-            // 탈출 성공 판정
-            const distDoor = camera.position.distanceTo(exitDoorMesh.position);
-            if (distDoor < 3.0 && hasKey) {
-                if (currentLevel < maxLevel) {
-                    loadLevel(currentLevel + 1);
-                } else {
-                    gameClear = true;
-                    endScreen.style.display = 'flex';
-                    endScreen.style.background = '#0a1a0a';
-                    endTitle.innerText = "ALL LEVELS ESCAPED!";
-                    endTitle.style.color = "#00ff00";
-                    endDesc.innerText = "🎉 백룸의 모든 레벨을 무사히 탈출했습니다!";
-                    respawnTimer.style.display = 'none';
-                }
-            }
-
-            if (keyMesh) keyMesh.rotation.y += 0.02;
-
-            prevTime = time;
-            renderer.render(scene, camera);
-        }
-
-        window.onload = init;
-    </script>
+gameLoop();
+</script>
 </body>
-</html>
-"""
+</html>"""
 
-components.html(game_html, height=750)
+components.html(game_real_rule_html, height=580)
