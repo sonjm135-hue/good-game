@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="2P Basketball - Skills & Sound Update", layout="wide")
+st.set_page_config(page_title="2P Basketball - Dunk Block Update", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -51,8 +51,8 @@ game_html = """
     </div>
 
     <div id="controls-guide">
-        <div><b class="p1-color">1P</b>: A/D(이동) | W(점프) | L-Shift(대쉬) | Space(슛/덩크) | <span class="skill-badge">E</span> 3점 강화</div>
-        <div><b class="p2-color">2P</b>: ←/→(이동) | ↑(점프) | R-Shift(대쉬) | Enter(슛/덩크) | <span class="skill-badge">K</span> 그림자 워프</div>
+        <div><b class="p1-color">1P</b>: A/D(이동) | W(점프/<b>블락</b>) | L-Shift(대쉬) | Space(슛/덩크) | <span class="skill-badge">E</span> 3점 강화</div>
+        <div><b class="p2-color">2P</b>: ←/→(이동) | ↑(점프/<b>블락</b>) | R-Shift(대쉬) | Enter(슛/덩크) | <span class="skill-badge">K</span> 그림자 워프</div>
     </div>
 
     <div id="quarter-notice">
@@ -110,6 +110,16 @@ game_html = """
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
                 osc.connect(gain); gain.connect(audioCtx.destination);
                 osc.start(now); osc.stop(now + 0.4);
+            } else if (type === 'block') { // 블락 타격음
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(now); osc.stop(now + 0.2);
             } else if (type === 'skill') {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -124,9 +134,9 @@ game_html = """
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(523.25, now); // C5
-                osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
-                osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.setValueAtTime(659.25, now + 0.1);
+                osc.frequency.setValueAtTime(783.99, now + 0.2);
                 gain.gain.setValueAtTime(0.3, now);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
                 osc.connect(gain); gain.connect(audioCtx.destination);
@@ -185,14 +195,12 @@ game_html = """
                 if (e.repeat) return;
                 keys[e.code] = true;
 
-                // 1P 슛/덩크/스킬
                 if (e.code === 'Space' && p1.hasBall) {
                     if (checkDunkCondition(p1)) triggerDunk(p1);
                     else { p1.isCharging = true; p1.gauge = 0; p1.gaugeDir = 1; }
                 }
                 if (e.code === 'KeyE' && p1.skillCd <= 0) activateSkill(p1);
 
-                // 2P 슛/덩크/스킬
                 if (e.code === 'Enter' && p2.hasBall) {
                     if (checkDunkCondition(p2)) triggerDunk(p2);
                     else { p2.isCharging = true; p2.gauge = 0; p2.gaugeDir = 1; }
@@ -212,16 +220,14 @@ game_html = """
         }
 
         function activateSkill(player) {
-            player.skillCd = 8.0; // 8초 쿨타임
+            player.skillCd = 8.0;
             playSound('skill');
 
             if (player.id === 1) {
-                // 1P [3점 마스터]: 3점 라인 밖으로 이탈하며 다음 슛 게이지 완화
                 player.x = 240;
                 player.skillActive = true;
                 dunkEffectText = { text: "3PT SNIPER READY!", alpha: 1.0, x: player.x + 20, y: player.y - 30 };
             } else {
-                // 2P [그림자 워프]: 순간 이동하여 반대편 공중으로 이동
                 player.x = p1.x + (player.facing * -90);
                 player.y = PLAYER_START_Y - 60;
                 player.vy = -5;
@@ -262,6 +268,34 @@ game_html = """
                 x: targetHoop.rimX,
                 y: targetHoop.rimY - 45
             };
+        }
+
+        // --- 덩크 블락 로직 ---
+        function checkDunkBlock(attacker, defender) {
+            if (!attacker.isDunking) return;
+
+            // 수비수가 점프 상태(!isGrounded)이고 공격수와 근접(45px 이내)해 있을 때
+            const dist = Math.hypot((attacker.x + attacker.width/2) - (defender.x + defender.width/2), attacker.y - defender.y);
+
+            if (!defender.isGrounded && dist < 45) {
+                // 블락 성공 처리!
+                attacker.isDunking = false;
+                attacker.hasBall = false;
+                ball.holder = null;
+
+                // 공이 수비 방향으로 강하게 튕겨나감
+                ball.vx = attacker.id === 1 ? -8 : 8;
+                ball.vy = -6;
+
+                playSound('block');
+
+                dunkEffectText = {
+                    text: "BLOCKED!!",
+                    alpha: 1.0,
+                    x: (attacker.x + defender.x) / 2,
+                    y: attacker.y - 30
+                };
+            }
         }
 
         function startTimer() {
@@ -342,7 +376,7 @@ game_html = """
 
             let perfectMin = 65, perfectMax = 80;
             if (player.skillActive) {
-                perfectMin = 30; perfectMax = 95; // 스킬 활성화 시 그린존 대폭 증가
+                perfectMin = 30; perfectMax = 95;
                 player.skillActive = false;
             }
 
@@ -377,10 +411,16 @@ game_html = """
             p.x += p.vx;
             p.y += p.vy;
 
+            // 덩크 시도 중인 경우
             if (p.isDunking) {
-                const targetHoop = p.id === 1 ? hoops[1] : hoops[0];
-                const distToRim = Math.hypot((p.x + p.width/2) - targetHoop.rimX, p.y - targetHoop.rimY);
-                if (distToRim < 60 || p.vy > 0) executeDunk(p);
+                const defender = p.id === 1 ? p2 : p1;
+                checkDunkBlock(p, defender); // 블락 여부 검사
+
+                if (p.isDunking) { // 블락당하지 않고 살아남았다면 덩크 진행
+                    const targetHoop = p.id === 1 ? hoops[1] : hoops[0];
+                    const distToRim = Math.hypot((p.x + p.width/2) - targetHoop.rimX, p.y - targetHoop.rimY);
+                    if (distToRim < 60 || p.vy > 0) executeDunk(p);
+                }
             }
 
             if (p.x < 0) p.x = 0;
@@ -523,12 +563,10 @@ game_html = """
 
             ctx.restore();
 
-            // 스킬 쿨타임 UI 표시
             ctx.fillStyle = p.skillCd > 0 ? '#888' : '#ff9800';
             ctx.font = 'bold 11px Arial';
             ctx.fillText(p.skillCd > 0 ? `SKILL: ${Math.ceil(p.skillCd)}s` : 'SKILL READY!', p.x - 5, p.y - 12);
 
-            // 슛 게이지
             if (p.hasBall && p.isCharging) {
                 const gx = p.x + p.width / 2 - 30;
                 const gy = p.y - 25;
@@ -541,7 +579,7 @@ game_html = """
                 ctx.fillStyle = '#ff9800';
                 ctx.fillRect(gx, gy, 60, 10);
 
-                ctx.fillStyle = '#4caf50'; // 그린존
+                ctx.fillStyle = '#4caf50';
                 ctx.fillRect(gx + (minZone/100)*60, gy, ((maxZone - minZone)/100)*60, 10);
 
                 const barX = gx + (p.gauge / 100) * 60;
@@ -596,19 +634,16 @@ game_html = """
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 코트
             ctx.fillStyle = '#3e2723';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
             ctx.fillStyle = '#ffb74d';
             ctx.fillRect(0, groundY, canvas.width, 5);
 
-            // 3점선
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
             ctx.lineWidth = 3;
             ctx.beginPath(); ctx.arc(50, groundY, 200, -Math.PI/2, 0); ctx.stroke();
             ctx.beginPath(); ctx.arc(850, groundY, 200, -Math.PI, -Math.PI/2); ctx.stroke();
 
-            // 골대
             hoops.forEach(h => {
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(h.side === 'left' ? h.x - 10 : h.x, h.y, 10, 80);
