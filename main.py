@@ -46,7 +46,7 @@ game_html = """
     <div id="ui-overlay">
         <div>📍 <span id="level-title" style="font-weight: bold; color: #ffffa0;">LEVEL 0: THE LOBBY</span></div>
         <div>🔦 손전등: <span id="flashlight-status" style="color: #ffff00;">ON (F)</span> | 🧍 상태: <span id="crouch-status" style="color: #ffffff;">서있음 (C)</span></div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">[화면 클릭] 마우스 잠금 | [WASD] 이동 | [C] 숙이기 | [F] 손전등/습득</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">[WASD] 이동 | [Q / E] 시점 회전 | [C] 숙이기 | [F] 손전등/습득</div>
         <div id="game-status" style="color: #ffcc00; margin-top: 5px; font-weight: bold;">🎯 목표: 맵 구석의 아이템을 찾아 녹색 비상문으로 탈출하세요!</div>
     </div>
     
@@ -54,8 +54,8 @@ game_html = """
         <h1 style="color: #d1b838; font-size: 60px; margin-bottom: 0px; letter-spacing: 6px;">THE BACKROOMS</h1>
         <p style="font-size: 16px; color: #a39655; margin-top: 15px; max-width: 600px; line-height: 1.6;">
             백룸의 깊은 층으로 떨어졌습니다.<br>
-            • <b>화면을 클릭하면 마우스와 시점이 일체화</b>됩니다.<br>
-            • 확장된 대형 미로를 탐색하고 <b>Level 0부터 Level 3까지 탈출</b>하세요.<br>
+            • <b>[Q] / [E] 키로 시점을 조절</b>할 수 있습니다.<br>
+            • 대형 미로를 탐색하고 <b>Level 0부터 Level 3까지 탈출</b>하세요.<br>
             • <b>C키로 숙여 개구멍을 통과</b>하고 손전등 빛을 조심하세요!
         </p>
         <button id="start-btn">NOCLIP IN</button>
@@ -87,10 +87,8 @@ game_html = """
         let keyMesh, exitDoorMesh, monsterMesh, monsterEyeMat;
         let isChasing = false;
 
-        // 개구멍 구역
         const holeBounds = { xMin: -11.0, xMax: -9.0, zMin: -8.0, zMax: 2.0 };
 
-        // 확장된 대형 맵 순찰 경로
         const waypoints = [
             new THREE.Vector3(-30, 0, -30),
             new THREE.Vector3(30, 0, -30),
@@ -99,7 +97,6 @@ game_html = """
         ];
         let currentWaypointIndex = 0;
 
-        // 레벨별 색상 및 테마 정보
         const levelThemes = [
             { name: "LEVEL 0: THE LOBBY", bg: 0x2b2716, wall: 0xa89f5a, floor: 0x59522c, monsterSpeed: 3.5 },
             { name: "LEVEL 1: HABITABLE ZONE", bg: 0x11161a, wall: 0x3d484f, floor: 0x22292e, monsterSpeed: 4.2 },
@@ -145,22 +142,6 @@ game_html = """
 
             loadLevel(0);
 
-            // [마우스 포인터 잠금 - 화면 일체화]
-            container.addEventListener('click', () => {
-                if (gameStarted && !gameOver && !gameClear) {
-                    container.requestPointerLock();
-                }
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (document.pointerLockElement === container && gameStarted && !gameOver && !gameClear) {
-                    const sensitivity = 0.0022;
-                    camera.rotation.y -= e.movementX * sensitivity;
-                    camera.rotation.x -= e.movementY * sensitivity;
-                    camera.rotation.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, camera.rotation.x));
-                }
-            });
-
             window.addEventListener('keydown', (e) => {
                 keys[e.code] = true;
                 if (e.code === 'KeyF') interact();
@@ -175,7 +156,6 @@ game_html = """
                 e.stopPropagation();
                 startScreen.style.display = 'none';
                 gameStarted = true;
-                container.requestPointerLock();
                 window.focus();
             });
 
@@ -187,7 +167,6 @@ game_html = """
             hasKey = false;
             isChasing = false;
             
-            // 기존 오브젝트 제거
             while(scene.children.length > 0){ 
                 scene.remove(scene.children[0]); 
             }
@@ -206,14 +185,12 @@ game_html = """
             mainFluorescentLight.position.set(0, 4.8, 0);
             scene.add(mainFluorescentLight);
 
-            // 대형 바닥 (80x80)
             const floorGeo = new THREE.PlaneGeometry(80, 80);
             const floorMat = new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.8 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
 
-            // 대형 천장
             const ceilGeo = new THREE.PlaneGeometry(80, 80);
             const ceilMat = new THREE.MeshStandardMaterial({ color: theme.bg });
             const ceil = new THREE.Mesh(ceilGeo, ceilMat);
@@ -223,7 +200,6 @@ game_html = """
 
             buildLargeMaze(theme.wall);
 
-            // 탈출 비상문
             const doorGeo = new THREE.BoxGeometry(2.5, 4.0, 0.2);
             const doorMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
             exitDoorMesh = new THREE.Mesh(doorGeo, doorMat);
@@ -234,7 +210,6 @@ game_html = """
             doorLight.position.set(0, 4.0, 37.5);
             scene.add(doorLight);
 
-            // 열쇠 아이템
             const keyGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 8);
             const keyMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0x888800 });
             keyMesh = new THREE.Mesh(keyGeo, keyMat);
@@ -248,18 +223,14 @@ game_html = """
             gameStatus.style.color = "#ffcc00";
         }
 
-        // 80x80 스케일 대형 미로 구축
         function buildLargeMaze(wallColor) {
             const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.8 });
 
             const wallData = [
-                // 외곽 벽
                 [0, 2.5, -39.5, 80, 5, 0.5],
                 [0, 2.5, 39.5, 80, 5, 0.5],
                 [-39.5, 2.5, 0, 0.5, 5, 80],
                 [39.5, 2.5, 0, 0.5, 5, 80],
-                
-                // 내부 확장 복도 벽들
                 [15, 2.5, -15, 0.5, 5, 40],
                 [-15, 2.5, 15, 40, 5, 0.5],
                 [20, 2.5, 15, 0.5, 5, 30],
@@ -274,7 +245,6 @@ game_html = """
                 scene.add(wall);
             });
 
-            // 개구멍 벽 (숙이기 필수)
             const holeWallGeo = new THREE.BoxGeometry(20, 3.8, 0.5);
             const holeWall = new THREE.Mesh(holeWallGeo, wallMat);
             holeWall.position.set(-10, 3.1, -3);
@@ -341,6 +311,11 @@ game_html = """
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
+            // [Q, E 키를 통한 시점 회전]
+            const rotateSpeed = 1.8 * delta;
+            if (keys['KeyQ']) camera.rotation.y += rotateSpeed; // Q: 좌회전
+            if (keys['KeyE']) camera.rotation.y -= rotateSpeed; // E: 우회전
+
             if (Math.random() < 0.03) {
                 mainFluorescentLight.intensity = Math.random() * 0.8 + 0.2;
             } else {
@@ -360,7 +335,6 @@ game_html = """
             if (keys['KeyA'] || keys['ArrowLeft']) camera.translateX(-moveSpeed);
             if (keys['KeyD'] || keys['ArrowRight']) camera.translateX(moveSpeed);
 
-            // [개구멍 판정]
             if (
                 camera.position.x > holeBounds.xMin && camera.position.x < holeBounds.xMax &&
                 camera.position.z > holeBounds.zMin && camera.position.z < holeBounds.zMax
@@ -415,10 +389,8 @@ game_html = """
                 }
             }
 
-            // 사망 판정
             if (distToPlayer < 1.8) {
                 gameOver = true;
-                document.exitPointerLock();
                 endScreen.style.display = 'flex';
                 endScreen.style.background = '#110000';
                 endTitle.innerText = "YOU DIED";
@@ -426,14 +398,12 @@ game_html = """
                 endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 잡혔습니다...`;
             }
 
-            // 레벨 클리어 / 전체 성공 조건
             const distDoor = camera.position.distanceTo(exitDoorMesh.position);
             if (distDoor < 3.0 && hasKey) {
                 if (currentLevel < maxLevel) {
                     loadLevel(currentLevel + 1);
                 } else {
                     gameClear = true;
-                    document.exitPointerLock();
                     endScreen.style.display = 'flex';
                     endScreen.style.background = '#0a1a0a';
                     endTitle.innerText = "ALL LEVELS ESCAPED!";
