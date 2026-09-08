@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
+# 페이지 설정
 st.set_page_config(page_title="NBA Superstars 2P - Enhanced Hoop", layout="wide")
 
 game_html = """
@@ -66,6 +67,7 @@ game_html = """
     <div id="controls-guide">
         <div><b class="p1-color">CURRY (GSW)</b>: <span class="key">A</span><span class="key">D</span> 이동 | <span class="key">W</span> 점프 | <span class="key">Space</span> 점프슛 | <span class="key">E</span> 스틸</div>
         <div><b class="p2-color">LEBRON (LAL)</b>: <span class="key">←</span><span class="key">→</span> 이동 | <span class="key">↑</span> 점프 | <span class="key">Enter</span> 점프슛 | <span class="key">K</span> 스틸</div>
+        <div style="color: #00e676;">💡 <span class="key">ESC</span> 전체화면</div>
     </div>
 
     <div id="game-over">
@@ -118,7 +120,7 @@ game_html = """
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const QTR_TIME = 60; // 쿼터당 60초 설정
+        const QTR_TIME = 60;
         let currentQuarter = 1;
         let p1Score = 0, p2Score = 0, timeLeft = QTR_TIME;
         let gameActive = true, timerInterval;
@@ -158,6 +160,19 @@ game_html = """
         const gravity = 0.5;
         const groundY = 430;
 
+        // 전체 화면 토글 함수
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch((err) => {
+                    console.log(`전체화면 전환 실패: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
         function addText(text, x, y, color = '#ffea00', scale = 1) {
             floatingTexts.push({ text, x, y, color, scale, alpha: 1.0 });
         }
@@ -174,6 +189,12 @@ game_html = """
         function init() {
             window.addEventListener('keydown', e => {
                 initAudio();
+
+                // ESC 키 누르면 전체화면 토글
+                if (e.code === 'Escape') {
+                    toggleFullscreen();
+                }
+
                 if (e.repeat) return;
                 keys[e.code] = true;
 
@@ -280,9 +301,10 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 15;
             ball.y = player.y - 30;
 
+            // ON FIRE 상태여도 반드시 초록색 영역(45 ~ 75%) 타이밍을 맞춰야만 골 적용!
             const isGreenZone = player.gauge >= 45 && player.gauge <= 75;
 
-            if (isGreenZone || player.isFire) {
+            if (isGreenZone) {
                 ball.isPerfectShot = true;
                 ball.isFireBall = player.isFire;
 
@@ -368,7 +390,7 @@ game_html = """
                 }
 
                 if (distToRim <= 15 && ball.vy > 0) {
-                    hoop.netAnim = 18; // 림 넷 출렁이는 애니메이션 활성화
+                    hoop.netAnim = 18;
                     playSound('goal'); screenShake = 12;
                     addParticles(hoop.rimX, hoop.rimY, '#ffea00', 25);
 
@@ -416,13 +438,11 @@ game_html = """
             ctx.beginPath(); ctx.arc(890, groundY, 210, -Math.PI, -Math.PI/2); ctx.stroke();
             ctx.moveTo(480, groundY); ctx.lineTo(480, canvas.height); ctx.stroke();
 
-            // 🏀 고퀄리티 디테일 NBA 골대 렌더링
             hoops.forEach(h => {
                 const isLeft = h.side === 'left';
                 const poleX = isLeft ? 15 : 945;
                 const boardX = isLeft ? 50 : 910;
                 
-                // 1. 골대 지지대 & 안전 패딩
                 ctx.fillStyle = isLeft ? '#1d428a' : '#552583';
                 ctx.beginPath();
                 ctx.moveTo(poleX, groundY);
@@ -431,31 +451,26 @@ game_html = """
                 ctx.lineTo(boardX + (isLeft ? -25 : 25), h.y + 40);
                 ctx.fill();
 
-                // 하단 두꺼운 안전 스탠션 패딩
                 ctx.fillStyle = '#111';
                 ctx.fillRect(isLeft ? 0 : 930, groundY - 70, 30, 70);
                 ctx.fillStyle = isLeft ? '#ffc72c' : '#fdb927';
                 ctx.fillRect(isLeft ? 5 : 935, groundY - 60, 20, 50);
 
-                // 상단 금속 프레임
                 ctx.strokeStyle = '#666'; ctx.lineWidth = 5;
                 ctx.beginPath();
                 ctx.moveTo(poleX, h.y + 20); ctx.lineTo(boardX, h.y + 20);
                 ctx.moveTo(poleX, h.y + 70); ctx.lineTo(boardX, h.y + 70);
                 ctx.stroke();
 
-                // 2. 투명 강화유리 백보드 + 레드 타겟 사각형
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
                 ctx.fillRect(boardX - (isLeft ? 0 : 8), h.y, 8, 100);
                 
                 ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
                 ctx.strokeRect(boardX - (isLeft ? 0 : 8), h.y, 8, 100);
 
-                // 타겟 박스
                 ctx.strokeStyle = '#e63946'; ctx.lineWidth = 3;
                 ctx.strokeRect(boardX + (isLeft ? 2 : -18), h.y + 55, 16, 28);
 
-                // 3. 림 브래킷 & 주황색 림
                 ctx.fillStyle = '#ff3d00';
                 ctx.fillRect(boardX + (isLeft ? 8 : -20), h.y + 78, 12, 6);
 
@@ -467,7 +482,6 @@ game_html = """
                 ctx.lineTo(rimEndX, h.rimY);
                 ctx.stroke();
 
-                // 4. 움직이는 상세 그물망 (Net)
                 const netSwing = h.netAnim > 0 ? Math.sin(h.netAnim) * 6 : 0;
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'; ctx.lineWidth = 1.8;
                 
@@ -478,14 +492,12 @@ game_html = """
                 const netBottomY = h.rimY + 32;
 
                 ctx.beginPath();
-                // 세로선 5줄
                 for(let i=0; i<=4; i++) {
                     let tx = netTopLeft + (i / 4) * 32;
                     let bx = netBotLeft + (i / 4) * 18;
                     ctx.moveTo(tx, h.rimY);
                     ctx.lineTo(bx, netBottomY);
                 }
-                // 가로 격자선
                 ctx.moveTo(netTopLeft, h.rimY + 10); ctx.lineTo(netTopRight, h.rimY + 10);
                 ctx.moveTo(netTopLeft + 3, h.rimY + 20); ctx.lineTo(netTopRight - 3, h.rimY + 20);
                 ctx.stroke();
@@ -499,22 +511,18 @@ game_html = """
 
             if (p.stunTimer > 0) ctx.rotate((Math.random() - 0.5) * 0.4);
 
-            // 그림자
             ctx.fillStyle = 'rgba(0,0,0,0.4)';
             ctx.beginPath(); ctx.ellipse(0, p.height, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
 
-            // 다리
             const legSwing = Math.sin(p.walkCycle) * 14;
             ctx.strokeStyle = p.skinColor; ctx.lineWidth = 8; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(-6, 50); ctx.lineTo(-6 + legSwing, p.height - 2); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(6, 50); ctx.lineTo(6 - legSwing, p.height - 2); ctx.stroke();
 
-            // 신발
             ctx.fillStyle = p.secondaryColor;
             ctx.fillRect(-10 + legSwing, p.height - 4, 12, 6);
             ctx.fillRect(2 - legSwing, p.height - 4, 12, 6);
 
-            // 유니폼
             ctx.fillStyle = p.primaryColor; ctx.fillRect(-14, 38, 28, 16);
             ctx.fillStyle = p.secondaryColor; ctx.fillRect(-14, 50, 28, 4);
 
@@ -522,7 +530,6 @@ game_html = """
             ctx.fillStyle = p.secondaryColor; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
             ctx.fillText(p.number, 0, 32);
 
-            // 팔
             ctx.strokeStyle = p.skinColor; ctx.lineWidth = 7;
             if (p.shootAnim > 0) {
                 ctx.beginPath(); ctx.moveTo(-10, 18); ctx.lineTo(-14, -8); ctx.stroke();
@@ -535,7 +542,6 @@ game_html = """
                 ctx.beginPath(); ctx.moveTo(10, 18); ctx.lineTo(10 + legSwing * 0.8, 32); ctx.stroke();
             }
 
-            // 캐릭터 머리
             ctx.fillStyle = p.skinColor;
             ctx.beginPath(); ctx.arc(0, -2, p.headRadius, 0, Math.PI * 2); ctx.fill();
 
@@ -553,7 +559,6 @@ game_html = """
                 ctx.fillStyle = p.headbandColor; ctx.fillRect(-p.headRadius, -8, p.headRadius * 2, 7);
             }
 
-            // 표정
             ctx.fillStyle = '#000';
             if (p.stunTimer > 0) {
                 ctx.font = 'bold 12px Arial'; ctx.fillText('X X', p.facing * 4 - 8, 4);
@@ -569,7 +574,6 @@ game_html = """
 
             ctx.restore();
 
-            // 타이밍 게이지
             if (p.hasBall && p.isCharging) {
                 const gx = p.x + p.width / 2 - 35; const gy = p.y - 45;
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'; ctx.fillRect(gx, gy, 70, 9);
@@ -649,4 +653,4 @@ game_html = """
 </html>
 """
 
-components.html(game_html, height=600)
+components.html(game_html, height=620)
