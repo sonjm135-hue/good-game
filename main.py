@@ -1,7 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# 페이지 설정
 st.set_page_config(page_title="NBA Superstars 2P - Enhanced Hoop", layout="wide")
 
 game_html = """
@@ -11,21 +10,29 @@ game_html = """
     <meta charset="UTF-8">
     <style>
         body { margin: 0; overflow: hidden; background-color: #0d0e15; font-family: 'Impact', 'Arial Black', sans-serif; user-select: none; }
-        #canvas-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        #canvas-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; }
         canvas { background: #141520; border-bottom: 10px solid #c5a059; box-shadow: 0 0 35px rgba(197, 160, 89, 0.3); }
         
         #ui {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 35px; color: #fff; font-size: 24px; font-weight: bold; align-items: center;
-            background: rgba(11, 12, 16, 0.92); padding: 12px 35px; border-radius: 20px; z-index: 10; border: 2px solid #c5a059;
+            display: flex; gap: 25px; color: #fff; font-size: 22px; font-weight: bold; align-items: center;
+            background: rgba(11, 12, 16, 0.92); padding: 10px 30px; border-radius: 20px; z-index: 10; border: 2px solid #c5a059;
             box-shadow: 0 0 20px rgba(0,0,0,0.8);
         }
         .p1-color { color: #ffc72c; text-shadow: 0 0 10px #1d428a; }
         .p2-color { color: #fdb927; text-shadow: 0 0 10px #552583; }
-        .q-badge { background: #ff3d00; color: #fff; padding: 4px 12px; border-radius: 8px; font-size: 18px; letter-spacing: 1px; }
-        .fire-text { color: #ffea00; animation: blink 0.3s infinite alternate; font-size: 18px; }
+        .q-badge { background: #ff3d00; color: #fff; padding: 4px 12px; border-radius: 8px; font-size: 16px; letter-spacing: 1px; }
+        .fire-text { color: #ffea00; animation: blink 0.3s infinite alternate; font-size: 16px; }
 
         @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
+
+        /* 전체화면 버튼 스타일 */
+        #fs-btn {
+            background: #c5a059; color: #000; border: none; padding: 6px 14px;
+            border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px;
+            transition: 0.2s;
+        }
+        #fs-btn:hover { background: #ffea00; transform: scale(1.05); }
 
         #game-over {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -44,8 +51,8 @@ game_html = """
 
         #controls-guide {
             position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 35px; color: #fff; font-size: 13px; font-family: sans-serif;
-            background: rgba(0,0,0,0.85); padding: 8px 25px; border-radius: 10px; border: 1px solid #444;
+            display: flex; gap: 25px; color: #fff; font-size: 13px; font-family: sans-serif;
+            background: rgba(0,0,0,0.85); padding: 8px 25px; border-radius: 10px; border: 1px solid #444; align-items: center;
         }
         .key { background: #333; padding: 2px 6px; border-radius: 4px; border: 1px solid #666; color: #ffea00; }
     </style>
@@ -58,6 +65,7 @@ game_html = """
             <span style="color: #ffea00; margin-top: 2px;"><span id="timer">60</span>s</span>
         </div>
         <div>23. LEBRON <span id="p2-combo" class="fire-text"></span>: <span id="p2-score" class="p2-color">0</span></div>
+        <button id="fs-btn" onclick="toggleFullscreen()">⛶ 전체화면</button>
     </div>
 
     <div id="canvas-container">
@@ -65,9 +73,9 @@ game_html = """
     </div>
 
     <div id="controls-guide">
-        <div><b class="p1-color">CURRY (GSW)</b>: <span class="key">A</span><span class="key">D</span> 이동 | <span class="key">W</span> 점프 | <span class="key">Space</span> 점프슛 | <span class="key">E</span> 스틸</div>
-        <div><b class="p2-color">LEBRON (LAL)</b>: <span class="key">←</span><span class="key">→</span> 이동 | <span class="key">↑</span> 점프 | <span class="key">Enter</span> 점프슛 | <span class="key">K</span> 스틸</div>
-        <div style="color: #00e676;">💡 <span class="key">ESC</span> 전체화면</div>
+        <div><b class="p1-color">CURRY</b>: <span class="key">A</span><span class="key">D</span> 이동 | <span class="key">W</span> 점프 | <span class="key">Space</span> 슛 | <span class="key">E</span> 스틸</div>
+        <div><b class="p2-color">LEBRON</b>: <span class="key">←</span><span class="key">→</span> 이동 | <span class="key">↑</span> 점프 | <span class="key">Enter</span> 슛 | <span class="key">K</span> 스틸</div>
+        <div style="color: #00e676;">💡 <span class="key">F</span> 키 또는 상단 버튼으로 전체화면</div>
     </div>
 
     <div id="game-over">
@@ -160,15 +168,21 @@ game_html = """
         const gravity = 0.5;
         const groundY = 430;
 
-        // 전체 화면 토글 함수
+        // 전체 화면 토글 (전체 문서 또는 부모 창 대상)
         function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch((err) => {
-                    console.log(`전체화면 전환 실패: ${err.message}`);
-                });
+            initAudio();
+            const elem = document.documentElement;
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen();
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                }
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
                 }
             }
         }
@@ -190,8 +204,8 @@ game_html = """
             window.addEventListener('keydown', e => {
                 initAudio();
 
-                // ESC 키 누르면 전체화면 토글
-                if (e.code === 'Escape') {
+                // 'F' 키를 누르면 전체화면 토글
+                if (e.code === 'KeyF') {
                     toggleFullscreen();
                 }
 
@@ -301,7 +315,7 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 15;
             ball.y = player.y - 30;
 
-            // ON FIRE 상태여도 반드시 초록색 영역(45 ~ 75%) 타이밍을 맞춰야만 골 적용!
+            // ON FIRE 상태여도 반드시 초록색 영역(45 ~ 75%) 타이밍을 맞춰야만 성공!
             const isGreenZone = player.gauge >= 45 && player.gauge <= 75;
 
             if (isGreenZone) {
