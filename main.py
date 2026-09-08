@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="2P Basketball with Goal Reset", layout="wide")
+st.set_page_config(page_title="2P Basketball with Shot Gauge", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -49,8 +49,8 @@ game_html = """
     </div>
 
     <div id="controls-guide">
-        <div><b class="p1-color">1P (레드)</b>: A/D (이동) | W (점프) | Space (슛)</div>
-        <div><b class="p2-color">2P (블루)</b>: ←/→ (이동) | ↑ (점프) | Enter (슛)</div>
+        <div><b class="p1-color">1P (레드)</b>: A/D (이동) | W (점프) | Space (슛 게이지)</div>
+        <div><b class="p2-color">2P (블루)</b>: ←/→ (이동) | ↑ (점프) | Enter (슛 게이지)</div>
     </div>
 
     <div id="game-over">
@@ -68,7 +68,6 @@ game_html = """
 
         const keys = {};
 
-        // 플레이어 초기 설정 데이터
         const P1_START_X = 180;
         const P2_START_X = 685;
         const PLAYER_START_Y = 380;
@@ -76,22 +75,22 @@ game_html = """
         const p1 = {
             x: P1_START_X, y: PLAYER_START_Y, width: 35, height: 60,
             color: '#ff5252', vx: 0, vy: 0, isGrounded: false,
-            hasBall: false, id: 1, armAngle: 0, shootAnimTimer: 0, facing: 1
+            hasBall: false, id: 1, armAngle: 0, shootAnimTimer: 0, facing: 1,
+            gauge: 0, gaugeDir: 1, isCharging: false
         };
 
         const p2 = {
             x: P2_START_X, y: PLAYER_START_Y, width: 35, height: 60,
             color: '#448aff', vx: 0, vy: 0, isGrounded: false,
-            hasBall: false, id: 2, armAngle: 0, shootAnimTimer: 0, facing: -1
+            hasBall: false, id: 2, armAngle: 0, shootAnimTimer: 0, facing: -1,
+            gauge: 0, gaugeDir: 1, isCharging: false
         };
 
-        // 농구공 설정
         const ball = {
             x: 450, y: 200, radius: 12,
             vx: 0, vy: 0, holder: null, rotation: 0, trail: []
         };
 
-        // 골대 설정 (좌/우)
         const hoops = [
             { x: 50, y: 200, rimX: 80, rimY: 240, side: 'left' },
             { x: 850, y: 200, rimX: 820, rimY: 240, side: 'right' }
@@ -102,13 +101,31 @@ game_html = """
 
         function init() {
             window.addEventListener('keydown', e => {
+                if (e.repeat) return;
                 keys[e.code] = true;
-                if (e.code === 'Space' && p1.hasBall) shootBall(p1);
-                if (e.code === 'Enter' && p2.hasBall) shootBall(p2);
+
+                if (e.code === 'Space' && p1.hasBall) {
+                    p1.isCharging = true;
+                    p1.gauge = 0;
+                    p1.gaugeDir = 1;
+                }
+                if (e.code === 'Enter' && p2.hasBall) {
+                    p2.isCharging = true;
+                    p2.gauge = 0;
+                    p2.gaugeDir = 1;
+                }
             });
 
             window.addEventListener('keyup', e => {
                 keys[e.code] = false;
+
+                // 키를 뗄 때 슛 발사
+                if (e.code === 'Space' && p1.hasBall && p1.isCharging) {
+                    shootBall(p1);
+                }
+                if (e.code === 'Enter' && p2.hasBall && p2.isCharging) {
+                    shootBall(p2);
+                }
             });
 
             startTimer();
@@ -136,43 +153,26 @@ game_html = """
             startTimer();
         }
 
-        // 득점 시 처음 시작할 때의 배치 상태로 전원 리셋
         function resetRoundPositions() {
-            // 1P 초기화
-            p1.x = P1_START_X;
-            p1.y = PLAYER_START_Y;
-            p1.vx = 0;
-            p1.vy = 0;
-            p1.hasBall = false;
-            p1.shootAnimTimer = 0;
-            p1.facing = 1;
+            p1.x = P1_START_X; p1.y = PLAYER_START_Y; p1.vx = 0; p1.vy = 0;
+            p1.hasBall = false; p1.shootAnimTimer = 0; p1.facing = 1;
+            p1.isCharging = false; p1.gauge = 0;
 
-            // 2P 초기화
-            p2.x = P2_START_X;
-            p2.y = PLAYER_START_Y;
-            p2.vx = 0;
-            p2.vy = 0;
-            p2.hasBall = false;
-            p2.shootAnimTimer = 0;
-            p2.facing = -1;
+            p2.x = P2_START_X; p2.y = PLAYER_START_Y; p2.vx = 0; p2.vy = 0;
+            p2.hasBall = false; p2.shootAnimTimer = 0; p2.facing = -1;
+            p2.isCharging = false; p2.gauge = 0;
 
-            // 공 초기화
-            ball.x = 450;
-            ball.y = 200;
-            ball.vx = 0;
-            ball.vy = 0;
-            ball.holder = null;
-            ball.trail = [];
-            ball.rotation = 0;
+            ball.x = 450; ball.y = 200; ball.vx = 0; ball.vy = 0;
+            ball.holder = null; ball.trail = []; ball.rotation = 0;
         }
 
         function shootBall(player) {
             const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
             const targetX = targetHoop.rimX;
-            const targetY = targetHoop.rimY;
 
             player.shootAnimTimer = 15;
             player.hasBall = false;
+            player.isCharging = false;
             ball.holder = null;
 
             const dx = targetX - (player.x + player.width / 2);
@@ -181,8 +181,21 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 10;
             ball.y = player.y - 10;
 
-            ball.vx = (dx / dist) * (6.5 + dist * 0.008) + player.vx * 0.3;
-            ball.vy = -12.5 - Math.min(dist * 0.01, 3);
+            // 게이지 65% ~ 80% 사이(초록색 영역)이면 Perfect Shoot!
+            const perfectMin = 65;
+            const perfectMax = 80;
+            const powerRatio = player.gauge / 100;
+
+            if (player.gauge >= perfectMin && player.gauge <= perfectMax) {
+                // Perfect 슛: 무조건 림 안쪽으로 깔끔하게 비상
+                ball.vx = (dx / dist) * (6.2 + dist * 0.0082);
+                ball.vy = -13.0;
+            } else {
+                // 게이지 미달/초과: 빗나가는 파워 적용
+                const multiplier = powerRatio < 0.65 ? (0.6 + powerRatio * 0.5) : (1.1 + powerRatio * 0.2);
+                ball.vx = (dx / dist) * (6.5 + dist * 0.008) * multiplier;
+                ball.vy = -12.5 * (0.8 + powerRatio * 0.3);
+            }
         }
 
         function updatePlayer(p, leftKey, rightKey, jumpKey) {
@@ -206,6 +219,13 @@ game_html = """
                 p.y = groundY - p.height;
                 p.vy = 0;
                 p.isGrounded = true;
+            }
+
+            // 게이지 충전 업데이트 (0 -> 100 -> 0 왕복)
+            if (p.isCharging && p.hasBall) {
+                p.gauge += p.gaugeDir * 2.5;
+                if (p.gauge >= 100) { p.gauge = 100; p.gaugeDir = -1; }
+                if (p.gauge <= 0) { p.gauge = 0; p.gaugeDir = 1; }
             }
 
             if (p.shootAnimTimer > 0) {
@@ -260,7 +280,6 @@ game_html = """
                     ball.vx *= -0.7;
                 }
 
-                // 림 득점 판정 시 시작 위치로 전체 리셋
                 const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
                 if (distToRim < 18 && ball.vy > 0) {
                     if (hoop.side === 'right') {
@@ -270,7 +289,6 @@ game_html = """
                         p2Score += 2;
                         document.getElementById('p2-score').innerText = p2Score;
                     }
-                    // 골 입력 시 시작 상황으로 배치 리셋
                     resetRoundPositions();
                 }
             });
@@ -317,6 +335,31 @@ game_html = """
             ctx.stroke();
 
             ctx.restore();
+
+            // 슛 게이지 그리기 (공 소유 시)
+            if (p.hasBall) {
+                const gaugeWidth = 60;
+                const gaugeHeight = 10;
+                const gx = p.x + p.width / 2 - gaugeWidth / 2;
+                const gy = p.y - 25;
+
+                // 게이지 배경
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(gx - 2, gy - 2, gaugeWidth + 4, gaugeHeight + 4);
+
+                // 빨간색/노란색 영역
+                ctx.fillStyle = '#ff9800';
+                ctx.fillRect(gx, gy, gaugeWidth, gaugeHeight);
+
+                // Green Zone (65% ~ 80%)
+                ctx.fillStyle = '#4caf50';
+                ctx.fillRect(gx + gaugeWidth * 0.65, gy, gaugeWidth * 0.15, gaugeHeight);
+
+                // 현재 게이지 indicator
+                const barX = gx + (p.gauge / 100) * gaugeWidth;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(barX - 1.5, gy - 2, 3, gaugeHeight + 4);
+            }
         }
 
         function drawBall() {
