@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="3D Basketball Arcade", layout="wide")
+st.set_page_config(page_title="2P Arcade Basketball", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -9,18 +9,16 @@ game_html = """
 <head>
     <meta charset="UTF-8">
     <style>
-        body { margin: 0; overflow: hidden; background-color: #111; font-family: 'Arial', sans-serif; user-select: none; }
-        #canvas-container { width: 100vw; height: 100vh; }
+        body { margin: 0; overflow: hidden; background-color: #121212; font-family: 'Arial', sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        canvas { background: #222; border-bottom: 8px solid #555; }
         #ui {
-            position: absolute; top: 20px; left: 20px; color: #fff;
-            font-size: 20px; font-weight: bold; text-shadow: 2px 2px 4px #000;
-            pointer-events: none; z-index: 10;
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 40px; color: #fff; font-size: 24px; font-weight: bold;
+            background: rgba(0,0,0,0.6); padding: 10px 30px; border-radius: 15px; z-index: 10;
         }
-        #combo-ui {
-            font-size: 28px; color: #ffeb3b; display: none; margin-top: 5px;
-            animation: pulse 0.5s infinite alternate;
-        }
-        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
+        .p1-color { color: #ff5252; }
+        .p2-color { color: #448aff; }
         #game-over {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.85); display: none; flex-direction: column;
@@ -28,331 +26,285 @@ game_html = """
         }
         #restart-btn {
             margin-top: 20px; padding: 12px 30px; font-size: 22px; font-weight: bold;
-            color: #111; background-color: #ff9800; border: none; border-radius: 8px;
+            color: #111; background-color: #ffb74d; border: none; border-radius: 8px;
             cursor: pointer; transition: 0.2s;
         }
-        #restart-btn:hover { background-color: #ffb74d; transform: scale(1.05); }
-        #guide {
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            color: #ddd; font-size: 16px; background: rgba(0,0,0,0.6); padding: 8px 16px;
-            border-radius: 20px; pointer-events: none; z-index: 10;
+        #restart-btn:hover { transform: scale(1.05); }
+        #controls-guide {
+            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 50px; color: #aaa; font-size: 14px;
+            background: rgba(0,0,0,0.5); padding: 8px 20px; border-radius: 10px;
         }
     </style>
 </head>
 <body>
-    <div id="canvas-container"></div>
     <div id="ui">
-        <div>SCORE: <span id="score" style="color: #4caf50;">0</span></div>
-        <div>TIME: <span id="timer" style="color: #ff5722;">60</span>s</div>
-        <div id="combo-ui">🔥 <span id="combo-count">0</span> COMBO! (+<span id="combo-bonus">0</span>)</div>
+        <div>1P: <span id="p1-score" class="p1-color">0</span></div>
+        <div>TIME: <span id="timer" style="color: #ffeb3b;">60</span>s</div>
+        <div>2P: <span id="p2-score" class="p2-color">0</span></div>
     </div>
-    <div id="guide">마우스 드래그로 조준 및 힘을 조절하여 슛을 쏘세요!</div>
+
+    <div id="canvas-container">
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+    </div>
+
+    <div id="controls-guide">
+        <div><b class="p1-color">1P (레드)</b>: A/D (이동) | W (점프) | Space (슛)</div>
+        <div><b class="p2-color">2P (블루)</b>: ←/→ (이동) | ↑ (점프) | Enter (슛)</div>
+    </div>
 
     <div id="game-over">
-        <h1 style="font-size: 50px; margin-bottom: 10px; color: #ff9800;">GAME OVER</h1>
-        <p style="font-size: 24px;">최종 점수: <span id="final-score" style="color: #4caf50;">0</span>점</p>
-        <button id="restart-btn" onclick="resetGame()">다시 도전</button>
+        <h1 id="winner-text" style="font-size: 48px; margin-bottom: 10px;">PLAYER 1 WIN!</h1>
+        <p style="font-size: 24px;">최종 스코어 - 1P: <span id="final-p1">0</span> | 2P: <span id="final-p2">0</span></p>
+        <button id="restart-btn" onclick="resetGame()">다시 대결하기</button>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        let scene, camera, renderer;
-        let ball, rim, backboard, hoopGroup;
-        let isDragging = false, dragStart = { x: 0, y: 0 }, dragEnd = { x: 0, y: 0 };
-        let ballVelocity = new THREE.Vector3(0, 0, 0);
-        let isBallInAir = false;
-        
-        // 게임 상태 변수
-        let score = 0, timeLeft = 60, combo = 0;
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let p1Score = 0, p2Score = 0, timeLeft = 60;
         let gameActive = true, timerInterval;
-        let particles = [];
 
-        // 골대 이동 관련 변수
-        let hoopDirection = 1;
-        let hoopSpeed = 0.05;
+        const keys = {};
 
-        const gravity = -0.008;
-        const ballInitialPos = new THREE.Vector3(0, 1.2, 5);
+        // 플레이어 설정
+        const p1 = {
+            x: 150, y: 380, width: 35, height: 60,
+            color: '#ff5252', vx: 0, vy: 0, isGrounded: false,
+            hasBall: false, id: 1
+        };
+
+        const p2 = {
+            x: 715, y: 380, width: 35, height: 60,
+            color: '#448aff', vx: 0, vy: 0, isGrounded: false,
+            hasBall: false, id: 2
+        };
+
+        // 농구공 설정
+        const ball = {
+            x: 450, y: 200, radius: 12,
+            vx: 0, vy: 0, holder: null
+        };
+
+        // 골대 설정 (좌/우)
+        const hoops = [
+            { x: 50, y: 220, rimX: 75, rimY: 250, side: 'left' },
+            { x: 850, y: 220, rimX: 825, rimY: 250, side: 'right' }
+        ];
+
+        const gravity = 0.5;
+        const groundY = 440;
 
         function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a2e);
+            window.addEventListener('keydown', e => {
+                keys[e.code] = true;
+                if (e.code === 'Space' && p1.hasBall) shootBall(p1, 1);
+                if (e.code === 'Enter' && p2.hasBall) shootBall(p2, -1);
+            });
 
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 2.5, 8);
-            camera.lookAt(0, 2, 0);
+            window.addEventListener('keyup', e => {
+                keys[e.code] = false;
+            });
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-            // 조명
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            dirLight.position.set(5, 10, 7);
-            dirLight.castShadow = true;
-            scene.add(dirLight);
-
-            // 바닥
-            const floorGeo = new THREE.PlaneGeometry(20, 20);
-            const floorMat = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.8 });
-            const floor = new THREE.Mesh(floorGeo, floorMat);
-            floor.rotation.x = -Math.PI / 2;
-            floor.receiveShadow = true;
-            scene.add(floor);
-
-            // 농구공
-            const ballGeo = new THREE.SphereGeometry(0.35, 32, 32);
-            const ballMat = new THREE.MeshStandardMaterial({ color: 0xe65100, roughness: 0.4 });
-            ball = new THREE.Mesh(ballGeo, ballMat);
-            ball.castShadow = true;
-            scene.add(ball);
-
-            // 골대 그룹 생성
-            hoopGroup = new THREE.Group();
-            
-            // 백보드
-            const bbGeo = new THREE.BoxGeometry(2.4, 1.6, 0.1);
-            const bbMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.2 });
-            backboard = new THREE.Mesh(bbGeo, bbMat);
-            backboard.position.set(0, 3.5, -0.05);
-            backboard.castShadow = true;
-            hoopGroup.add(backboard);
-
-            // 백보드 테두리 사각형
-            const innerBoxGeo = new THREE.BoxGeometry(0.8, 0.6, 0.12);
-            const innerBoxMat = new THREE.MeshBasicMaterial({ color: 0xd32f2f });
-            const innerBox = new THREE.Mesh(innerBoxGeo, innerBoxMat);
-            innerBox.position.set(0, 3.2, -0.04);
-            hoopGroup.add(innerBox);
-
-            // 림 (골대 고리)
-            const rimGeo = new THREE.TorusGeometry(0.48, 0.04, 16, 32);
-            const rimMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.3 });
-            rim = new THREE.Mesh(rimGeo, rimMat);
-            rim.rotation.x = Math.PI / 2;
-            rim.position.set(0, 2.9, 0.48);
-            rim.castShadow = true;
-            hoopGroup.add(rim);
-
-            // 기둥
-            const poleGeo = new THREE.CylinderGeometry(0.1, 0.1, 4, 16);
-            const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
-            const pole = new THREE.Mesh(poleGeo, poleMat);
-            pole.position.set(0, 2, -0.2);
-            hoopGroup.add(pole);
-
-            hoopGroup.position.set(0, 0, -2);
-            scene.add(hoopGroup);
-
-            // 이벤트 리스너
-            window.addEventListener('mousedown', onMouseDown);
-            window.addEventListener('mouseup', onMouseUp);
-            window.addEventListener('resize', onWindowResize);
-
-            resetBall();
             startTimer();
-            animate();
+            requestAnimationFrame(gameLoop);
         }
 
         function startTimer() {
+            clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 if (!gameActive) return;
                 timeLeft--;
                 document.getElementById('timer').innerText = timeLeft;
-                if (timeLeft <= 0) {
-                    endGame();
-                }
+                if (timeLeft <= 0) endGame();
             }, 1000);
         }
 
-        function endGame() {
-            gameActive = false;
-            clearInterval(timerInterval);
-            document.getElementById('final-score').innerText = score;
-            document.getElementById('game-over').style.display = 'flex';
-        }
-
         function resetGame() {
-            score = 0;
-            timeLeft = 60;
-            combo = 0;
-            gameActive = true;
-            document.getElementById('score').innerText = score;
-            document.getElementById('timer').innerText = timeLeft;
-            document.getElementById('combo-ui').style.display = 'none';
+            p1Score = 0; p2Score = 0; timeLeft = 60; gameActive = true;
+            document.getElementById('p1-score').innerText = 0;
+            document.getElementById('p2-score').innerText = 0;
+            document.getElementById('timer').innerText = 60;
             document.getElementById('game-over').style.display = 'none';
+
+            p1.x = 150; p1.y = 380; p1.vx = 0; p1.vy = 0;
+            p2.x = 715; p2.y = 380; p2.vx = 0; p2.vy = 0;
             resetBall();
             startTimer();
         }
 
         function resetBall() {
-            isBallInAir = false;
-            ball.position.copy(ballInitialPos);
-            ballVelocity.set(0, 0, 0);
+            ball.x = 450;
+            ball.y = 200;
+            ball.vx = 0;
+            ball.vy = 0;
+            ball.holder = null;
+            p1.hasBall = false;
+            p2.hasBall = false;
         }
 
-        function onMouseDown(e) {
-            if (!gameActive || isBallInAir) return;
-            isDragging = true;
-            dragStart.x = e.clientX;
-            dragStart.y = e.clientY;
-        }
-
-        function onMouseUp(e) {
-            if (!isDragging || isBallInAir) return;
-            isDragging = false;
-            dragEnd.x = e.clientX;
-            dragEnd.y = e.clientY;
-
-            const dx = dragEnd.x - dragStart.x;
-            const dy = dragStart.y - dragEnd.y; // Y축 반전
-
-            if (dy > 20) { // 최소 드래그 거리 조건
-                isBallInAir = true;
-                ballVelocity.x = dx * 0.008;
-                ballVelocity.y = Math.min(dy * 0.009, 0.32);
-                ballVelocity.z = -Math.min(dy * 0.015, 0.45);
-            }
-        }
-
-        // 파티클 폭죽 이펙트
-        function createParticles(pos) {
-            const pCount = 25;
-            const pGeo = new THREE.SphereGeometry(0.05, 8, 8);
-            const pMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b });
-
-            for (let i = 0; i < pCount; i++) {
-                const particle = new THREE.Mesh(pGeo, pMat);
-                particle.position.copy(pos);
-                particle.velocity = new THREE.Vector3(
-                    (Math.random() - 0.5) * 0.2,
-                    Math.random() * 0.2,
-                    (Math.random() - 0.5) * 0.2
-                );
-                particle.alive = true;
-                scene.add(particle);
-                particles.push(particle);
-            }
-        }
-
-        function updateParticles() {
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                p.position.add(p.velocity);
-                p.scale.multiplyScalar(0.95);
-                if (p.scale.x < 0.01) {
-                    scene.remove(p);
-                    particles.splice(i, 1);
-                }
-            }
-        }
-
-        function checkScore() {
-            const worldRimPos = new THREE.Vector3();
-            rim.getWorldPosition(worldRimPos);
-
-            const distXZ = new THREE.Vector2(ball.position.x - worldRimPos.x, ball.position.z - worldRimPos.z).length();
-            const distY = Math.abs(ball.position.y - worldRimPos.y);
-
-            // 공이 림 중앙 근처를 위에서 아래로 통과할 때
-            if (distXZ < 0.35 && distY < 0.2 && ballVelocity.y < 0) {
-                combo++;
-                const bonus = combo > 1 ? (combo - 1) * 2 : 0;
-                const points = 2 + bonus;
-                score += points;
-
-                document.getElementById('score').innerText = score;
-                if (combo > 1) {
-                    document.getElementById('combo-count').innerText = combo;
-                    document.getElementById('combo-bonus').innerText = bonus;
-                    document.getElementById('combo-ui').style.display = 'block';
-                }
-
-                createParticles(worldRimPos);
-                resetBall();
-            }
-        }
-
-        function checkCollisions() {
-            const worldRimPos = new THREE.Vector3();
-            rim.getWorldPosition(worldRimPos);
+        function shootBall(player, defaultDir) {
+            ball.holder = null;
+            player.hasBall = false;
             
-            const worldBbPos = new THREE.Vector3();
-            backboard.getWorldPosition(worldBbPos);
+            // 이동하는 방향으로 조준 가중치 추가
+            let dir = defaultDir;
+            if (player.vx !== 0) dir = Math.sign(player.vx);
 
-            // 1. 백보드 충돌
-            if (Math.abs(ball.position.x - worldBbPos.x) < 1.2 &&
-                Math.abs(ball.position.y - worldBbPos.y) < 0.8 &&
-                Math.abs(ball.position.z - worldBbPos.z) < 0.25) {
-                ballVelocity.z *= -0.6; // 반사
-                ballVelocity.x *= 0.8;
-                ball.position.z = worldBbPos.z + 0.26;
+            ball.vx = dir * 11 + player.vx * 0.5;
+            ball.vy = -12;
+            ball.x += dir * 20;
+        }
+
+        function updatePlayer(p, leftKey, rightKey, jumpKey) {
+            if (keys[leftKey]) p.vx = -4;
+            else if (keys[rightKey]) p.vx = 4;
+            else p.vx = 0;
+
+            if (keys[jumpKey] && p.isGrounded) {
+                p.vy = -11;
+                p.isGrounded = false;
             }
 
-            // 2. 림(고리) 바운스 충돌
-            const distToRim = ball.position.distanceTo(worldRimPos);
-            if (distToRim < 0.55 && distToRim > 0.35) {
-                ballVelocity.x += (ball.position.x - worldRimPos.x) * 0.1;
-                ballVelocity.z += (ball.position.z - worldRimPos.z) * 0.1;
-                ballVelocity.y *= -0.5;
+            p.vy += gravity;
+            p.x += p.vx;
+            p.y += p.vy;
+
+            // 이동 제한
+            if (p.x < 0) p.x = 0;
+            if (p.x + p.width > canvas.width) p.x = canvas.width - p.width;
+
+            // 바닥 충돌
+            if (p.y + p.height >= groundY) {
+                p.y = groundY - p.height;
+                p.vy = 0;
+                p.isGrounded = true;
+            }
+
+            // 공 획득 체크
+            if (!ball.holder) {
+                const dist = Math.hypot((p.x + p.width/2) - ball.x, (p.y + p.height/2) - ball.y);
+                if (dist < 40) {
+                    ball.holder = p;
+                    p.hasBall = true;
+                }
+            } else if (ball.holder === p) {
+                ball.x = p.x + p.width / 2 + (p.id === 1 ? 15 : -15);
+                ball.y = p.y + 15;
             }
         }
 
-        function animate() {
-            requestAnimationFrame(animate);
+        function updateBall() {
+            if (ball.holder) return;
 
+            ball.vy += gravity * 0.8;
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+
+            // 바닥 튕김
+            if (ball.y + ball.radius >= groundY) {
+                ball.y = groundY - ball.radius;
+                ball.vy *= -0.6;
+                ball.vx *= 0.8;
+            }
+
+            // 벽 튕김
+            if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= canvas.width) {
+                ball.vx *= -0.7;
+            }
+
+            // 골대 충돌 및 득점 체크
+            hoops.forEach(hoop => {
+                // 백보드 충돌
+                const bbX = hoop.side === 'left' ? hoop.x : hoop.x;
+                if (Math.abs(ball.x - bbX) < 15 && ball.y > hoop.y && ball.y < hoop.y + 80) {
+                    ball.vx *= -0.8;
+                }
+
+                // 림 득점 판정 (위에서 아래로 통과)
+                const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
+                if (distToRim < 18 && ball.vy > 0) {
+                    if (hoop.side === 'right') {
+                        p1Score += 2;
+                        document.getElementById('p1-score').innerText = p1Score;
+                    } else {
+                        p2Score += 2;
+                        document.getElementById('p2-score').innerText = p2Score;
+                    }
+                    resetBall();
+                }
+            });
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(timerInterval);
+            
+            const winnerText = document.getElementById('winner-text');
+            if (p1Score > p2Score) {
+                winnerText.innerText = "PLAYER 1 WIN!";
+                winnerText.style.color = "#ff5252";
+            } else if (p2Score > p1Score) {
+                winnerText.innerText = "PLAYER 2 WIN!";
+                winnerText.style.color = "#448aff";
+            } else {
+                winnerText.innerText = "DRAW GAME!";
+                winnerText.style.color = "#ffeb3b";
+            }
+
+            document.getElementById('final-p1').innerText = p1Score;
+            document.getElementById('final-p2').innerText = p2Score;
+            document.getElementById('game-over').style.display = 'flex';
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 바닥
+            ctx.fillStyle = '#3e2723';
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+            ctx.fillStyle = '#ffb74d';
+            ctx.fillRect(0, groundY, canvas.width, 5);
+
+            // 골대 그리프
+            hoops.forEach(h => {
+                // 백보드
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(h.side === 'left' ? h.x - 10 : h.x, h.y, 10, 80);
+                // 림
+                ctx.strokeStyle = '#e65100';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(h.rimX, h.rimY, 15, 0, Math.PI);
+                ctx.stroke();
+            });
+
+            // 플레이어 1
+            ctx.fillStyle = p1.color;
+            ctx.fillRect(p1.x, p1.y, p1.width, p1.height);
+            // 플레이어 2
+            ctx.fillStyle = p2.color;
+            ctx.fillRect(p2.x, p2.y, p2.width, p2.height);
+
+            // 농구공
+            ctx.fillStyle = '#ff9800';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+
+        function gameLoop() {
             if (gameActive) {
-                // 골대 좌우 이동 (난이도 요인)
-                hoopGroup.position.x += hoopSpeed * hoopDirection;
-                if (hoopGroup.position.x > 2.5 || hoopGroup.position.x < -2.5) {
-                    hoopDirection *= -1;
-                }
-
-                // 공 물리 연산
-                if (isBallInAir) {
-                    ballVelocity.y += gravity;
-                    ball.position.add(ballVelocity);
-                    ball.rotation.x += 0.05;
-
-                    checkCollisions();
-                    checkScore();
-
-                    // 바닥 충돌 및 바운스
-                    if (ball.position.y <= 0.35) {
-                        ball.position.y = 0.35;
-                        ballVelocity.y *= -0.5;
-                        ballVelocity.x *= 0.8;
-                        ballVelocity.z *= 0.8;
-
-                        // 슛 실패 시 콤보 초기화 후 리셋
-                        if (Math.abs(ballVelocity.y) < 0.02) {
-                            combo = 0;
-                            document.getElementById('combo-ui').style.display = 'none';
-                            resetBall();
-                        }
-                    }
-
-                    // 맵 밖으로 벗어난 경우 리셋
-                    if (ball.position.z < -10 || Math.abs(ball.position.x) > 8) {
-                        combo = 0;
-                        document.getElementById('combo-ui').style.display = 'none';
-                        resetBall();
-                    }
-                }
+                updatePlayer(p1, 'KeyA', 'KeyD', 'KeyW');
+                updatePlayer(p2, 'ArrowLeft', 'ArrowRight', 'ArrowUp');
+                updateBall();
             }
-
-            updateParticles();
-            renderer.render(scene, camera);
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            draw();
+            requestAnimationFrame(gameLoop);
         }
 
         window.onload = init;
@@ -361,4 +313,4 @@ game_html = """
 </html>
 """
 
-components.html(game_html, height=750)
+components.html(game_html, height=600)
