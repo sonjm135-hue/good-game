@@ -46,7 +46,7 @@ game_html = """
     <div id="ui-overlay">
         <div>📍 <span id="level-title" style="font-weight: bold; color: #ffffa0;">LEVEL 0: THE LOBBY</span></div>
         <div>🔦 손전등: <span id="flashlight-status" style="color: #ffff00;">ON (F)</span> | 🧍 상태: <span id="crouch-status" style="color: #ffffff;">서있음 (C)</span></div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">[W/A/D] 이동 | [S] 아래 보기 | [Q/E] 좌우 회전 | [C] 숙이기 | [F] 손전등/습득</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">[WASD] 이동 | [Q / E] 시점 회전 | [C] 숙이기 | [F] 손전등/습득</div>
         <div id="game-status" style="color: #ffcc00; margin-top: 5px; font-weight: bold;">🎯 목표: 맵 구석의 아이템을 찾아 녹색 비상문으로 탈출하세요!</div>
     </div>
     
@@ -54,9 +54,9 @@ game_html = """
         <h1 style="color: #d1b838; font-size: 60px; margin-bottom: 0px; letter-spacing: 6px;">THE BACKROOMS</h1>
         <p style="font-size: 16px; color: #a39655; margin-top: 15px; max-width: 600px; line-height: 1.6;">
             백룸의 깊은 층으로 떨어졌습니다.<br>
-            • <b>[W/A/D]로 이동</b>하고, <b>[S]키로 바닥/아래</b>를 볼 수 있습니다.<br>
-            • <b>[Q] / [E] 키로 시점을 회전</b>하세요.<br>
-            • 괴물에게 사냥당하면 사망합니다! <b>Level 0부터 Level 3까지 탈출</b>하세요!
+            • <b>[WASD]로 이동</b>하고 <b>[Q] / [E] 키로 시점을 회전</b>하세요.<br>
+            • 레벨이 올라갈수록 <b>괴물이 훨씬 빠르고 기민</b>해집니다.<br>
+            • 사망 시 <b>3초 후 해당 레벨에서 다시 시작</b>합니다!
         </p>
         <button id="start-btn">NOCLIP IN</button>
     </div>
@@ -64,7 +64,7 @@ game_html = """
     <div id="end-screen">
         <h1 id="end-title" style="font-size: 70px; letter-spacing: 4px;">YOU DIED</h1>
         <p id="end-desc" style="font-size: 18px; color: #aaa; margin-top: 10px;">괴물에게 잡혔습니다...</p>
-        <p style="font-size: 14px; color: #666; margin-top: 30px;">F5 키를 눌러 다시 시작하기</p>
+        <p id="respawn-timer" style="font-size: 16px; color: #ff5555; margin-top: 25px;">3초 후 다시 시작합니다...</p>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -93,11 +93,12 @@ game_html = """
         let waypoints = [];
         let currentWaypointIndex = 0;
 
+        // 레벨별 난이도 차등 적용 (속도 및 감지 거리)
         const levelThemes = [
-            { name: "LEVEL 0: THE LOBBY", bg: 0x2b2716, wall: 0xa89f5a, floor: 0x59522c, monsterSpeed: 3.5, monsterName: "Bacteria" },
-            { name: "LEVEL 1: HABITABLE ZONE", bg: 0x0a1014, wall: 0x2c3840, floor: 0x182026, monsterSpeed: 4.2, monsterName: "Smiler" },
-            { name: "LEVEL 2: PIPE DREAMS", bg: 0x1a0f0a, wall: 0x4a2e1d, floor: 0x29180e, monsterSpeed: 4.8, monsterName: "Skin-Stealer" },
-            { name: "LEVEL 3: ELECTRICAL STATION", bg: 0x080808, wall: 0x222222, floor: 0x111111, monsterSpeed: 5.5, monsterName: "Hound" }
+            { name: "LEVEL 0: THE LOBBY", bg: 0x2b2716, wall: 0xa89f5a, floor: 0x59522c, monsterSpeed: 3.5, detectDist: 14.0, monsterName: "Bacteria (쉬움)" },
+            { name: "LEVEL 1: HABITABLE ZONE", bg: 0x0a1014, wall: 0x2c3840, floor: 0x182026, monsterSpeed: 4.5, detectDist: 18.0, monsterName: "Smiler (보통)" },
+            { name: "LEVEL 2: PIPE DREAMS", bg: 0x1a0f0a, wall: 0x4a2e1d, floor: 0x29180e, monsterSpeed: 5.8, detectDist: 22.0, monsterName: "Skin-Stealer (어려움)" },
+            { name: "LEVEL 3: ELECTRICAL STATION", bg: 0x080808, wall: 0x222222, floor: 0x111111, monsterSpeed: 7.2, detectDist: 26.0, monsterName: "Hound (매우 어려움)" }
         ];
 
         const startScreen = document.getElementById('start-screen');
@@ -109,6 +110,7 @@ game_html = """
         const endScreen = document.getElementById('end-screen');
         const endTitle = document.getElementById('end-title');
         const endDesc = document.getElementById('end-desc');
+        const respawnTimer = document.getElementById('respawn-timer');
         const container = document.getElementById('canvas-container');
 
         function init() {
@@ -154,7 +156,9 @@ game_html = """
             currentLevel = levelIdx;
             hasKey = false;
             isChasing = false;
+            gameOver = false;
             wallBoxes = [];
+            endScreen.style.display = 'none';
             
             while(scene.children.length > 0){ 
                 scene.remove(scene.children[0]); 
@@ -208,6 +212,7 @@ game_html = """
             createMonsterForLevel(currentLevel);
 
             camera.position.set(0, 1.6, 32);
+            camera.rotation.set(0, 0, 0);
             gameStatus.innerText = `🎯 [${theme.name}] 구석의 아몬드 워터를 찾은 후 비상문으로 탈출하세요!`;
             gameStatus.style.color = "#ffcc00";
         }
@@ -402,6 +407,30 @@ game_html = """
             return false;
         }
 
+        // 사망 처리 및 3초 카운트다운 후 재시작 함수
+        function handlePlayerDeath() {
+            gameOver = true;
+            endScreen.style.display = 'flex';
+            endScreen.style.background = '#110000';
+            endTitle.innerText = "YOU DIED";
+            endTitle.style.color = "#8b0000";
+            endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 ${levelThemes[currentLevel].monsterName}에게 잡혔습니다...`;
+
+            let countdown = 3;
+            respawnTimer.style.display = 'block';
+            respawnTimer.innerText = `${countdown}초 후 다시 시작합니다...`;
+
+            const timerInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    respawnTimer.innerText = `${countdown}초 후 다시 시작합니다...`;
+                } else {
+                    clearInterval(timerInterval);
+                    loadLevel(currentLevel); // 현재 레벨 다시 로드
+                }
+            }, 1000);
+        }
+
         function animate() {
             requestAnimationFrame(animate);
 
@@ -417,10 +446,6 @@ game_html = """
             const rotateSpeed = 1.8 * delta;
             if (keys['KeyQ']) camera.rotation.y += rotateSpeed;
             if (keys['KeyE']) camera.rotation.y -= rotateSpeed;
-
-            // [S 키 조작: 아래 둘러보기]
-            const targetPitch = keys['KeyS'] ? -Math.PI / 3.5 : 0;
-            camera.rotation.x += (targetPitch - camera.rotation.x) * 8.0 * delta;
 
             if (Math.random() < 0.03) {
                 mainFluorescentLight.intensity = Math.random() * 0.8 + 0.2;
@@ -441,7 +466,9 @@ game_html = """
 
             let moveVector = new THREE.Vector3();
 
+            // WASD 표준 이동 (S 키는 뒤로 이동)
             if (keys['KeyW'] || keys['ArrowUp']) moveVector.addScaledVector(forwardDir, moveSpeed);
+            if (keys['KeyS'] || keys['ArrowDown']) moveVector.addScaledVector(forwardDir, -moveSpeed);
             if (keys['KeyA'] || keys['ArrowLeft']) moveVector.addScaledVector(sideDir, -moveSpeed);
             if (keys['KeyD'] || keys['ArrowRight']) moveVector.addScaledVector(sideDir, moveSpeed);
 
@@ -455,7 +482,7 @@ game_html = """
                 camera.position.z = nextPosZ.z;
             }
 
-            // [개구멍 판정]
+            // 개구멍 판정
             if (
                 camera.position.x > holeBounds.xMin && camera.position.x < holeBounds.xMax &&
                 camera.position.z > holeBounds.zMin && camera.position.z < holeBounds.zMax
@@ -465,18 +492,20 @@ game_html = """
                 }
             }
 
-            // [괴물 AI 및 잡힘/사망 판정]
+            // [괴물 AI & 난이도 시스템]
             const distToPlayer = monsterMesh.position.distanceTo(camera.position);
-            const currentSpeed = levelThemes[currentLevel].monsterSpeed;
+            const theme = levelThemes[currentLevel];
+            const currentSpeed = theme.monsterSpeed;
+            const detectDist = theme.detectDist;
 
-            if (isFlashlightOn && distToPlayer < 16.0) {
+            if (isFlashlightOn && distToPlayer < detectDist) {
                 if (!isChasing) {
                     isChasing = true;
                     if(monsterEyeMat) monsterEyeMat.color.setHex(0xff0000);
-                    gameStatus.innerText = `🚨 [${levelThemes[currentLevel].monsterName}] 괴물이 당신을 감지했습니다!`;
+                    gameStatus.innerText = `🚨 [${theme.monsterName}] 괴물이 당신을 추격합니다!`;
                     gameStatus.style.color = "#ff0000";
                 }
-            } else if (!isFlashlightOn && distToPlayer > 12.0) {
+            } else if (!isFlashlightOn && distToPlayer > (detectDist - 4.0)) {
                 if (isChasing) {
                     isChasing = false;
                     if(monsterEyeMat) monsterEyeMat.color.setHex(0xffffff);
@@ -510,14 +539,9 @@ game_html = """
                 }
             }
 
-            // [괴물에게 잡혔을 시 즉시 사망]
+            // [사망 체크]
             if (distToPlayer < 1.8) {
-                gameOver = true;
-                endScreen.style.display = 'flex';
-                endScreen.style.background = '#110000';
-                endTitle.innerText = "YOU DIED";
-                endTitle.style.color = "#8b0000";
-                endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 ${levelThemes[currentLevel].monsterName}에게 잡혀 죽었습니다...`;
+                handlePlayerDeath();
             }
 
             // 탈출 성공 판정
@@ -532,6 +556,7 @@ game_html = """
                     endTitle.innerText = "ALL LEVELS ESCAPED!";
                     endTitle.style.color = "#00ff00";
                     endDesc.innerText = "🎉 백룸의 모든 레벨을 무사히 탈출했습니다!";
+                    respawnTimer.style.display = 'none';
                 }
             }
 
