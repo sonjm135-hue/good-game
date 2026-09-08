@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="NBA Superstars 2P - 3 Quarters", layout="wide")
+st.set_page_config(page_title="NBA Superstars 2P - Enhanced Hoop", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -11,7 +11,7 @@ game_html = """
     <style>
         body { margin: 0; overflow: hidden; background-color: #0d0e15; font-family: 'Impact', 'Arial Black', sans-serif; user-select: none; }
         #canvas-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        canvas { background: #181925; border-bottom: 10px solid #c5a059; box-shadow: 0 0 35px rgba(197, 160, 89, 0.3); }
+        canvas { background: #141520; border-bottom: 10px solid #c5a059; box-shadow: 0 0 35px rgba(197, 160, 89, 0.3); }
         
         #ui {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
@@ -54,7 +54,7 @@ game_html = """
         <div>30. CURRY <span id="p1-combo" class="fire-text"></span>: <span id="p1-score" class="p1-color">0</span></div>
         <div style="display:flex; flex-direction:column; align-items:center;">
             <span id="q-text" class="q-badge">1st QTR</span>
-            <span style="color: #ffea00; margin-top: 2px;"><span id="timer">30</span>s</span>
+            <span style="color: #ffea00; margin-top: 2px;"><span id="timer">60</span>s</span>
         </div>
         <div>23. LEBRON <span id="p2-combo" class="fire-text"></span>: <span id="p2-score" class="p2-color">0</span></div>
     </div>
@@ -71,7 +71,7 @@ game_html = """
     <div id="game-over">
         <h1 id="winner-text" class="overlay-title">STEPH CURRY WINS!</h1>
         <p id="final-score" class="overlay-sub">최종 점수 <span id="final-p1" class="p1-color">0</span> : <span id="final-p2" class="p2-color">0</span></p>
-        <button id="restart-btn" onclick="onBtnClick()">새 경기 시작!</button>
+        <button id="restart-btn" onclick="onBtnClick()">다음 쿼터 / 새 경기</button>
     </div>
 
     <script>
@@ -118,8 +118,8 @@ game_html = """
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const QTR_TIME = 30; // 쿼터당 30초
-        let currentQuarter = 1; // 총 3쿼터
+        const QTR_TIME = 60; // 쿼터당 60초 설정
+        let currentQuarter = 1;
         let p1Score = 0, p2Score = 0, timeLeft = QTR_TIME;
         let gameActive = true, timerInterval;
         let screenShake = 0;
@@ -129,8 +129,8 @@ game_html = """
         const keys = {};
 
         const hoops = [
-            { x: 70, y: 180, rimX: 110, rimY: 220, side: 'left' },
-            { x: 890, y: 180, rimX: 850, rimY: 220, side: 'right' }
+            { x: 50, y: 140, rimX: 95, rimY: 220, side: 'left', netAnim: 0 },
+            { x: 910, y: 140, rimX: 865, rimY: 220, side: 'right', netAnim: 0 }
         ];
 
         const p1 = {
@@ -280,15 +280,13 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 15;
             ball.y = player.y - 30;
 
-            // 초록색 게이지 영역: 45 ~ 75
             const isGreenZone = player.gauge >= 45 && player.gauge <= 75;
 
             if (isGreenZone || player.isFire) {
-                // 초록색 게이지 들어가면 거의 100% 무조건 골! (완벽 물리 궤적 계산)
                 ball.isPerfectShot = true;
                 ball.isFireBall = player.isFire;
 
-                const timeToRim = 32; // 프레임
+                const timeToRim = 32;
                 ball.vx = dx / timeToRim;
                 ball.vy = (targetHoop.rimY - 15 - ball.y - 0.5 * gravity * Math.pow(timeToRim, 2)) / timeToRim;
 
@@ -361,13 +359,16 @@ game_html = """
             if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= canvas.width) ball.vx *= -0.7;
 
             hoops.forEach(hoop => {
+                if (hoop.netAnim > 0) hoop.netAnim--;
+
                 const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
 
                 if (!ball.isPerfectShot && distToRim < 22 && distToRim > 12) {
                     ball.vx *= -0.8; ball.vy *= -0.5; playSound('bounce'); screenShake = 3;
                 }
 
-                if (distToRim <= 14 && ball.vy > 0) {
+                if (distToRim <= 15 && ball.vy > 0) {
+                    hoop.netAnim = 18; // 림 넷 출렁이는 애니메이션 활성화
                     playSound('goal'); screenShake = 12;
                     addParticles(hoop.rimX, hoop.rimY, '#ffea00', 25);
 
@@ -415,10 +416,79 @@ game_html = """
             ctx.beginPath(); ctx.arc(890, groundY, 210, -Math.PI, -Math.PI/2); ctx.stroke();
             ctx.moveTo(480, groundY); ctx.lineTo(480, canvas.height); ctx.stroke();
 
+            // 🏀 고퀄리티 디테일 NBA 골대 렌더링
             hoops.forEach(h => {
-                ctx.fillStyle = '#ffffff'; ctx.fillRect(h.side === 'left' ? h.x - 12 : h.x, h.y, 12, 90);
-                ctx.strokeStyle = '#e63946'; ctx.lineWidth = 6;
-                ctx.beginPath(); ctx.arc(h.rimX, h.rimY, 16, 0, Math.PI); ctx.stroke();
+                const isLeft = h.side === 'left';
+                const poleX = isLeft ? 15 : 945;
+                const boardX = isLeft ? 50 : 910;
+                
+                // 1. 골대 지지대 & 안전 패딩
+                ctx.fillStyle = isLeft ? '#1d428a' : '#552583';
+                ctx.beginPath();
+                ctx.moveTo(poleX, groundY);
+                ctx.lineTo(poleX + (isLeft ? 15 : -15), groundY);
+                ctx.lineTo(boardX + (isLeft ? -10 : 10), h.y + 40);
+                ctx.lineTo(boardX + (isLeft ? -25 : 25), h.y + 40);
+                ctx.fill();
+
+                // 하단 두꺼운 안전 스탠션 패딩
+                ctx.fillStyle = '#111';
+                ctx.fillRect(isLeft ? 0 : 930, groundY - 70, 30, 70);
+                ctx.fillStyle = isLeft ? '#ffc72c' : '#fdb927';
+                ctx.fillRect(isLeft ? 5 : 935, groundY - 60, 20, 50);
+
+                // 상단 금속 프레임
+                ctx.strokeStyle = '#666'; ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(poleX, h.y + 20); ctx.lineTo(boardX, h.y + 20);
+                ctx.moveTo(poleX, h.y + 70); ctx.lineTo(boardX, h.y + 70);
+                ctx.stroke();
+
+                // 2. 투명 강화유리 백보드 + 레드 타겟 사각형
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+                ctx.fillRect(boardX - (isLeft ? 0 : 8), h.y, 8, 100);
+                
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+                ctx.strokeRect(boardX - (isLeft ? 0 : 8), h.y, 8, 100);
+
+                // 타겟 박스
+                ctx.strokeStyle = '#e63946'; ctx.lineWidth = 3;
+                ctx.strokeRect(boardX + (isLeft ? 2 : -18), h.y + 55, 16, 28);
+
+                // 3. 림 브래킷 & 주황색 림
+                ctx.fillStyle = '#ff3d00';
+                ctx.fillRect(boardX + (isLeft ? 8 : -20), h.y + 78, 12, 6);
+
+                ctx.strokeStyle = '#ff3d00'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+                ctx.beginPath();
+                const rimStartX = boardX + (isLeft ? 20 : -20);
+                const rimEndX = h.rimX + (isLeft ? 16 : -16);
+                ctx.moveTo(rimStartX, h.rimY);
+                ctx.lineTo(rimEndX, h.rimY);
+                ctx.stroke();
+
+                // 4. 움직이는 상세 그물망 (Net)
+                const netSwing = h.netAnim > 0 ? Math.sin(h.netAnim) * 6 : 0;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'; ctx.lineWidth = 1.8;
+                
+                const netTopLeft = h.rimX - 16;
+                const netTopRight = h.rimX + 16;
+                const netBotLeft = h.rimX - 9 + netSwing;
+                const netBotRight = h.rimX + 9 + netSwing;
+                const netBottomY = h.rimY + 32;
+
+                ctx.beginPath();
+                // 세로선 5줄
+                for(let i=0; i<=4; i++) {
+                    let tx = netTopLeft + (i / 4) * 32;
+                    let bx = netBotLeft + (i / 4) * 18;
+                    ctx.moveTo(tx, h.rimY);
+                    ctx.lineTo(bx, netBottomY);
+                }
+                // 가로 격자선
+                ctx.moveTo(netTopLeft, h.rimY + 10); ctx.lineTo(netTopRight, h.rimY + 10);
+                ctx.moveTo(netTopLeft + 3, h.rimY + 20); ctx.lineTo(netTopRight - 3, h.rimY + 20);
+                ctx.stroke();
             });
         }
 
@@ -433,7 +503,7 @@ game_html = """
             ctx.fillStyle = 'rgba(0,0,0,0.4)';
             ctx.beginPath(); ctx.ellipse(0, p.height, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
 
-            // 다리 (달리기 애니메이션)
+            // 다리
             const legSwing = Math.sin(p.walkCycle) * 14;
             ctx.strokeStyle = p.skinColor; ctx.lineWidth = 8; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(-6, 50); ctx.lineTo(-6 + legSwing, p.height - 2); ctx.stroke();
@@ -452,7 +522,7 @@ game_html = """
             ctx.fillStyle = p.secondaryColor; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
             ctx.fillText(p.number, 0, 32);
 
-            // 팔 모션
+            // 팔
             ctx.strokeStyle = p.skinColor; ctx.lineWidth = 7;
             if (p.shootAnim > 0) {
                 ctx.beginPath(); ctx.moveTo(-10, 18); ctx.lineTo(-14, -8); ctx.stroke();
@@ -469,13 +539,13 @@ game_html = """
             ctx.fillStyle = p.skinColor;
             ctx.beginPath(); ctx.arc(0, -2, p.headRadius, 0, Math.PI * 2); ctx.fill();
 
-            if (p.id === 1) { // STEPH CURRY
+            if (p.id === 1) { // CURRY
                 ctx.fillStyle = p.hairColor;
                 ctx.beginPath(); ctx.arc(0, -10, p.headRadius, Math.PI, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = '#5c3a1e';
                 ctx.fillRect(-8, 12, 16, 5); ctx.fillRect(-4, 8, 8, 4);
                 ctx.fillStyle = p.headbandColor; ctx.fillRect(-p.headRadius, -10, p.headRadius * 2, 6);
-            } else { // LEBRON JAMES
+            } else { // LEBRON
                 ctx.fillStyle = p.hairColor;
                 ctx.beginPath(); ctx.arc(0, -12, p.headRadius, Math.PI, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = '#1a0d00';
@@ -499,13 +569,11 @@ game_html = """
 
             ctx.restore();
 
-            // 초록 게이지
+            // 타이밍 게이지
             if (p.hasBall && p.isCharging) {
                 const gx = p.x + p.width / 2 - 35; const gy = p.y - 45;
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'; ctx.fillRect(gx, gy, 70, 9);
                 ctx.fillStyle = '#ff1744'; ctx.fillRect(gx, gy, 70, 9);
-                
-                // PERFECT GREEN ZONE (45~75%)
                 ctx.fillStyle = '#00e676'; ctx.fillRect(gx + 31.5, gy, 21, 9);
 
                 const barX = gx + (p.gauge / 100) * 70;
