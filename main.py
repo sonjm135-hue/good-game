@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="2P Basketball - 3 Quarters Mode", layout="wide")
+st.set_page_config(page_title="2P Basketball - Dunk System Update", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -32,8 +32,8 @@ game_html = """
         #restart-btn:hover { transform: scale(1.05); }
         #controls-guide {
             position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 50px; color: #aaa; font-size: 14px;
-            background: rgba(0,0,0,0.5); padding: 8px 20px; border-radius: 10px;
+            display: flex; gap: 40px; color: #aaa; font-size: 13px;
+            background: rgba(0,0,0,0.6); padding: 8px 20px; border-radius: 10px;
         }
     </style>
 </head>
@@ -50,8 +50,8 @@ game_html = """
     </div>
 
     <div id="controls-guide">
-        <div><b class="p1-color">1P (레드)</b>: A/D (이동) | W (점프) | Space (슛 게이지)</div>
-        <div><b class="p2-color">2P (블루)</b>: ←/→ (이동) | ↑ (점프) | Enter (슛 게이지)</div>
+        <div><b class="p1-color">1P</b>: A/D (이동) | W (점프) | Space (점프 중 골대 근처: <b>덩크</b> / 지상: <b>점프슛</b>)</div>
+        <div><b class="p2-color">2P</b>: ←/→ (이동) | ↑ (점프) | Enter (점프 중 골대 근처: <b>덩크</b> / 지상: <b>점프슛</b>)</div>
     </div>
 
     <!-- 쿼터 전환 알림 Overlay -->
@@ -71,27 +71,33 @@ game_html = """
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const QUARTER_TIME = 40; // 쿼터당 시간 (초)
+        const QUARTER_TIME = 40;
         let currentQuarter = 1;
         let p1Score = 0, p2Score = 0, timeLeft = QUARTER_TIME;
         let gameActive = true, timerInterval;
+        let dunkEffectText = { text: '', alpha: 0, x: 0, y: 0 };
 
         const keys = {};
 
         const P1_START_X = 180;
         const P2_START_X = 685;
-        const PLAYER_START_Y = 380;
+        const PLAYER_START_Y = 370;
+
+        const hoops = [
+            { x: 50, y: 190, rimX: 85, rimY: 230, side: 'left' },
+            { x: 850, y: 190, rimX: 815, rimY: 230, side: 'right' }
+        ];
 
         const p1 = {
-            x: P1_START_X, y: PLAYER_START_Y, width: 35, height: 60,
-            color: '#ff5252', vx: 0, vy: 0, isGrounded: false,
+            x: P1_START_X, y: PLAYER_START_Y, width: 36, height: 70,
+            color: '#e53935', jerseyNo: '23', vx: 0, vy: 0, isGrounded: false,
             hasBall: false, id: 1, armAngle: 0, shootAnimTimer: 0, facing: 1,
             gauge: 0, gaugeDir: 1, isCharging: false
         };
 
         const p2 = {
-            x: P2_START_X, y: PLAYER_START_Y, width: 35, height: 60,
-            color: '#448aff', vx: 0, vy: 0, isGrounded: false,
+            x: P2_START_X, y: PLAYER_START_Y, width: 36, height: 70,
+            color: '#1e88e5', jerseyNo: '30', vx: 0, vy: 0, isGrounded: false,
             hasBall: false, id: 2, armAngle: 0, shootAnimTimer: 0, facing: -1,
             gauge: 0, gaugeDir: 1, isCharging: false
         };
@@ -101,11 +107,6 @@ game_html = """
             vx: 0, vy: 0, holder: null, rotation: 0, trail: []
         };
 
-        const hoops = [
-            { x: 50, y: 200, rimX: 80, rimY: 240, side: 'left' },
-            { x: 850, y: 200, rimX: 820, rimY: 240, side: 'right' }
-        ];
-
         const gravity = 0.45;
         const groundY = 440;
 
@@ -114,15 +115,25 @@ game_html = """
                 if (e.repeat) return;
                 keys[e.code] = true;
 
+                // 1P 슛/덩크 체크
                 if (e.code === 'Space' && p1.hasBall) {
-                    p1.isCharging = true;
-                    p1.gauge = 0;
-                    p1.gaugeDir = 1;
+                    if (checkDunkCondition(p1)) {
+                        performDunk(p1);
+                    } else {
+                        p1.isCharging = true;
+                        p1.gauge = 0;
+                        p1.gaugeDir = 1;
+                    }
                 }
+                // 2P 슛/덩크 체크
                 if (e.code === 'Enter' && p2.hasBall) {
-                    p2.isCharging = true;
-                    p2.gauge = 0;
-                    p2.gaugeDir = 1;
+                    if (checkDunkCondition(p2)) {
+                        performDunk(p2);
+                    } else {
+                        p2.isCharging = true;
+                        p2.gauge = 0;
+                        p2.gaugeDir = 1;
+                    }
                 }
             });
 
@@ -139,6 +150,36 @@ game_html = """
 
             startTimer();
             requestAnimationFrame(gameLoop);
+        }
+
+        function checkDunkCondition(player) {
+            // 공중 점프 상태이고 골대 영역 근처일 때 덩크 발동가능
+            const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
+            const distToRim = Math.hypot((player.x + player.width/2) - targetHoop.rimX, player.y - targetHoop.rimY);
+            return (!player.isGrounded && distToRim < 135);
+        }
+
+        function performDunk(player) {
+            const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
+            
+            player.hasBall = false;
+            player.isCharging = false;
+            player.shootAnimTimer = 20;
+            ball.holder = null;
+
+            // 덩크 궤적: 공을 림 위에서 직격으로 내려찍음
+            ball.x = targetHoop.rimX + (player.id === 1 ? -5 : 5);
+            ball.y = targetHoop.rimY - 25;
+            ball.vx = player.id === 1 ? 1.5 : -1.5;
+            ball.vy = 12; // 수직 강하 속도
+
+            // 덩크 이펙트 생성
+            dunkEffectText = {
+                text: "SLAM DUNK!!",
+                alpha: 1.0,
+                x: targetHoop.rimX,
+                y: targetHoop.rimY - 40
+            };
         }
 
         function startTimer() {
@@ -159,7 +200,6 @@ game_html = """
             clearInterval(timerInterval);
 
             if (currentQuarter < 3) {
-                // 다음 쿼터 준비
                 const noticeElem = document.getElementById('quarter-notice');
                 document.getElementById('quarter-notice-title').innerText = currentQuarter + "Q END";
                 noticeElem.style.display = 'flex';
@@ -175,7 +215,6 @@ game_html = """
                     startTimer();
                 }, 2000);
             } else {
-                // 3쿼터 종료 시 최종 게임 종료
                 endGame();
             }
         }
@@ -235,12 +274,12 @@ game_html = """
         }
 
         function updatePlayer(p, leftKey, rightKey, jumpKey) {
-            if (keys[leftKey]) { p.vx = -4; p.facing = -1; }
-            else if (keys[rightKey]) { p.vx = 4; p.facing = 1; }
+            if (keys[leftKey]) { p.vx = -4.5; p.facing = -1; }
+            else if (keys[rightKey]) { p.vx = 4.5; p.facing = 1; }
             else p.vx = 0;
 
             if (keys[jumpKey] && p.isGrounded) {
-                p.vy = -11;
+                p.vy = -12;
                 p.isGrounded = false;
             }
 
@@ -258,26 +297,26 @@ game_html = """
             }
 
             if (p.isCharging && p.hasBall) {
-                p.gauge += p.gaugeDir * 2.5;
+                p.gauge += p.gaugeDir * 2.8;
                 if (p.gauge >= 100) { p.gauge = 100; p.gaugeDir = -1; }
                 if (p.gauge <= 0) { p.gauge = 0; p.gaugeDir = 1; }
             }
 
             if (p.shootAnimTimer > 0) {
                 p.shootAnimTimer--;
-                p.armAngle = -Math.PI / 3 * p.facing;
+                p.armAngle = -Math.PI / 2.5 * p.facing;
             } else {
-                p.armAngle = p.hasBall ? -Math.PI / 6 * p.facing : 0;
+                p.armAngle = p.hasBall ? -Math.PI / 5 * p.facing : 0;
             }
 
             if (!ball.holder) {
                 const dist = Math.hypot((p.x + p.width/2) - ball.x, (p.y + p.height/2) - ball.y);
-                if (dist < 38) {
+                if (dist < 40) {
                     ball.holder = p;
                     p.hasBall = true;
                 }
             } else if (ball.holder === p) {
-                ball.x = p.x + p.width / 2 + p.facing * 12;
+                ball.x = p.x + p.width / 2 + p.facing * 14;
                 ball.y = p.y + 10;
                 ball.vx = 0;
                 ball.vy = 0;
@@ -350,28 +389,64 @@ game_html = """
             document.getElementById('game-over').style.display = 'flex';
         }
 
+        // 디테일한 농구선수 캐릭터 그리기 함수
         function drawPlayer(p) {
             ctx.save();
-            ctx.translate(p.x + p.width / 2, p.y + p.height / 2);
+            ctx.translate(p.x + p.width / 2, p.y);
 
+            const isFacingRight = p.facing === 1;
+
+            // 1. 다리 / 신발
+            ctx.fillStyle = '#212121'; // 농구화
+            ctx.fillRect(isFacingRight ? -12 : -6, p.height - 10, 12, 10);
+            ctx.fillRect(isFacingRight ? 2 : -10, p.height - 10, 12, 10);
+
+            ctx.fillStyle = '#ffcc80'; // 피부톤 (다리)
+            ctx.fillRect(-10, p.height - 24, 8, 15);
+            ctx.fillRect(2, p.height - 24, 8, 15);
+
+            // 2. 유니폼 바지
             ctx.fillStyle = p.color;
-            ctx.fillRect(-p.width / 2, -p.height / 2, p.width, p.height);
+            ctx.fillRect(-13, p.height - 38, 26, 16);
 
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(p.facing * 5, -p.height / 2 + 8, 8, 8);
+            // 3. 유니폼 상의 (몸통)
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-14, 20, 28, 24);
 
-            ctx.strokeStyle = p.color;
-            ctx.lineWidth = 6;
+            // 등번호
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.jerseyNo, 0, 37);
+
+            // 4. 머리 / 피부
+            ctx.fillStyle = '#ffcc80'; // 머리 피부
             ctx.beginPath();
-            ctx.moveTo(0, -5);
+            ctx.arc(0, 10, 11, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 헤드밴드
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-11, 3, 22, 5);
+
+            // 눈
+            ctx.fillStyle = '#111';
+            ctx.fillRect(p.facing * 4, 8, 3, 3);
+
+            // 5. 팔 / 슛 동작
+            ctx.strokeStyle = '#ffcc80';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(0, 24);
             const armX = Math.cos(p.armAngle) * 22 * p.facing;
-            const armY = Math.sin(p.armAngle) * 22;
+            const armY = 24 + Math.sin(p.armAngle) * 22;
             ctx.lineTo(armX, armY);
             ctx.stroke();
 
             ctx.restore();
 
-            if (p.hasBall) {
+            // 6. 슛 게이지 (공을 가진 상태에서 충전 중일 때)
+            if (p.hasBall && p.isCharging) {
                 const gaugeWidth = 60;
                 const gaugeHeight = 10;
                 const gx = p.x + p.width / 2 - gaugeWidth / 2;
@@ -423,14 +498,40 @@ game_html = """
             ctx.restore();
         }
 
+        function drawEffects() {
+            if (dunkEffectText.alpha > 0) {
+                ctx.save();
+                ctx.fillStyle = `rgba(255, 215, 0, ${dunkEffectText.alpha})`;
+                ctx.font = 'bold 26px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(dunkEffectText.text, dunkEffectText.x, dunkEffectText.y);
+                ctx.restore();
+
+                dunkEffectText.alpha -= 0.02;
+                dunkEffectText.y -= 0.5;
+            }
+        }
+
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            // 코트 바닥
             ctx.fillStyle = '#3e2723';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
             ctx.fillStyle = '#ffb74d';
             ctx.fillRect(0, groundY, canvas.width, 5);
 
+            // 3점선 디테일
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(50, groundY, 200, -Math.PI/2, 0);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(850, groundY, 200, -Math.PI, -Math.PI/2);
+            ctx.stroke();
+
+            // 골대
             hoops.forEach(h => {
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(h.side === 'left' ? h.x - 10 : h.x, h.y, 10, 80);
@@ -445,6 +546,7 @@ game_html = """
             drawPlayer(p1);
             drawPlayer(p2);
             drawBall();
+            drawEffects();
         }
 
         function gameLoop() {
