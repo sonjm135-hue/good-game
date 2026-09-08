@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="NBA Superstars 2P - Deep Male Voice", layout="wide")
+st.set_page_config(page_title="NBA Superstars 2P - Parabolic Arc Shot", layout="wide")
 
 # Streamlit 여백 및 패딩 제거
 st.markdown("""
@@ -106,7 +106,7 @@ game_html = """
     <div id="controls-guide">
         <div><b class="p1-color">CURRY</b>: <span class="key">A</span><span class="key">D</span> 이동 | <span class="key">W</span> 점프 | <span class="key">Space</span> 슛 | <span class="key">E</span> 스틸</div>
         <div><b class="p2-color">LEBRON</b>: <span class="key">←</span><span class="key">→</span> 이동 | <span class="key">↑</span> 점프 | <span class="key">Enter</span> 슛 | <span class="key">K</span> 스틸</div>
-        <div style="color: #00e676;">🎙️ 초록 게이지 적중 시 <b style="color:#00e676;">낮고 굵은 남성 보이스</b> 출력!</div>
+        <div style="color: #ffea00;">🏀 높은 포물선 슛 & 림 폭발 골인 이펙트 적용!</div>
     </div>
 
     <div id="game-over">
@@ -126,24 +126,13 @@ game_html = """
             if (audioCtx.state === 'suspended') audioCtx.resume();
         }
 
-        // 남성 저음 보이스 선택 함수
         function loadMaleVoice() {
             if ('speechSynthesis' in window) {
                 const voices = window.speechSynthesis.getVoices();
-                // 1순위: 영어 전용 굵은 남성 목소리 검색
                 maleVoice = voices.find(v => v.lang.startsWith('en') && (
-                    v.name.includes('Male') || 
-                    v.name.includes('David') || 
-                    v.name.includes('Mark') || 
-                    v.name.includes('George') ||
-                    v.name.includes('Guy') ||
-                    v.name.includes('Google US English')
+                    v.name.includes('Male') || v.name.includes('David') || v.name.includes('Mark') ||
+                    v.name.includes('George') || v.name.includes('Guy') || v.name.includes('Google US English')
                 ));
-
-                // 2순위: 남성 키워드가 포함된 임의의 영어 목소리
-                if (!maleVoice) {
-                    maleVoice = voices.find(v => v.lang.startsWith('en') && !v.name.includes('Female') && !v.name.includes('Zira'));
-                }
             }
         }
 
@@ -152,37 +141,20 @@ game_html = """
             window.speechSynthesis.onvoiceschanged = loadMaleVoice;
         }
 
-        // 굵고 낮은 남성 목소리로 재생
         function playDeepMaleVoice() {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
-
                 const utterance = new SpeechSynthesisUtterance("Ho Ho Ho, Green Giant!");
-                utterance.lang = 'en-US';
-                utterance.pitch = 0.3; // 아주 낮은 굵은 톤 (0.0 ~ 2.0 중 0.3)
-                utterance.rate = 0.8;  // 웅장한 템포
-                utterance.volume = 1.0;
-
-                if (maleVoice) {
-                    utterance.voice = maleVoice;
-                    window.speechSynthesis.speak(utterance);
-                } else {
-                    // 남성 보이스가 불가능할 시 백업 MP3 재생
-                    backupAudio.currentTime = 0;
-                    backupAudio.play().catch(e => console.log(e));
-                }
+                utterance.lang = 'en-US'; utterance.pitch = 0.3; utterance.rate = 0.8; utterance.volume = 1.0;
+                if (maleVoice) utterance.voice = maleVoice;
+                window.speechSynthesis.speak(utterance);
             } else {
-                backupAudio.currentTime = 0;
-                backupAudio.play().catch(e => console.log(e));
+                backupAudio.currentTime = 0; backupAudio.play().catch(e => console.log(e));
             }
         }
 
         function playSound(type) {
-            if (type === 'green_giant') {
-                playDeepMaleVoice();
-                return;
-            }
-
+            if (type === 'green_giant') { playDeepMaleVoice(); return; }
             if (!audioCtx) return;
             const now = audioCtx.currentTime;
             
@@ -218,19 +190,11 @@ game_html = """
         const ctx = canvas.getContext('2d');
 
         function resizeCanvas() {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
+            const w = window.innerWidth, h = window.innerHeight;
             const targetRatio = 960 / 520;
-            let width = w;
-            let height = w / targetRatio;
-
-            if (height > h) {
-                height = h;
-                width = h * targetRatio;
-            }
-
-            canvas.style.width = `${width}px`;
-            canvas.style.height = `${height}px`;
+            let width = w, height = w / targetRatio;
+            if (height > h) { height = h; width = h * targetRatio; }
+            canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
         }
 
         window.addEventListener('resize', resizeCanvas);
@@ -242,6 +206,7 @@ game_html = """
         let gameActive = true, timerInterval;
         let screenShake = 0;
         let particles = [];
+        let shockwaves = [];
         let floatingTexts = [];
 
         const keys = {};
@@ -273,26 +238,19 @@ game_html = """
             x: 480, y: 200, radius: 13, vx: 0, vy: 0, holder: null, rotation: 0, trail: [], isFireBall: false, isPerfectShot: false
         };
 
-        const gravity = 0.5;
+        const gravity = 0.45;
         const groundY = 430;
 
         function toggleFullscreen() {
             initAudio();
             if (document.activeElement) document.activeElement.blur();
-
             const elem = document.documentElement;
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                if (elem.requestFullscreen) {
-                    elem.requestFullscreen();
-                } else if (elem.webkitRequestFullscreen) {
-                    elem.webkitRequestFullscreen();
-                }
+                if (elem.requestFullscreen) elem.requestFullscreen();
+                else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
             } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                }
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
             }
         }
 
@@ -300,13 +258,19 @@ game_html = """
             floatingTexts.push({ text, x, y, color, scale, alpha: 1.0 });
         }
 
-        function addParticles(x, y, color, count = 12) {
+        function addParticles(x, y, color, count = 25) {
             for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 8 + 3;
                 particles.push({
-                    x, y, vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
-                    radius: Math.random() * 4 + 2, color, life: 1.0
+                    x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                    radius: Math.random() * 5 + 3, color, life: 1.0
                 });
             }
+        }
+
+        function addShockwave(x, y, color) {
+            shockwaves.push({ x, y, radius: 5, maxRadius: 55, color, alpha: 1.0 });
         }
 
         function init() {
@@ -314,16 +278,10 @@ game_html = """
 
             window.addEventListener('keydown', e => {
                 initAudio();
-
                 if (['Space', 'Enter', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
-                    e.preventDefault();
-                    if (document.activeElement) document.activeElement.blur();
+                    e.preventDefault(); if (document.activeElement) document.activeElement.blur();
                 }
-
-                if (e.code === 'KeyF') {
-                    toggleFullscreen();
-                }
-
+                if (e.code === 'KeyF') toggleFullscreen();
                 if (e.repeat) return;
                 keys[e.code] = true;
 
@@ -382,7 +340,6 @@ game_html = """
                 const modal = document.getElementById('game-over');
                 const title = document.getElementById('winner-text');
                 const btn = document.getElementById('restart-btn');
-                
                 title.innerText = `${currentQuarter}쿼터 종료!`;
                 title.style.color = "#ffea00";
                 btn.innerText = `${currentQuarter + 1}쿼터 시작!`;
@@ -420,35 +377,44 @@ game_html = """
             ball.x = 480; ball.y = 200; ball.vx = 0; ball.vy = 0; ball.holder = null; ball.trail = []; ball.isFireBall = false; ball.isPerfectShot = false;
         }
 
+        // 🏀 높은 포물선 물리 계산 함수
         function shootBall(player) {
             player.shootAnim = 20;
             const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
-            const dx = targetHoop.rimX - (player.x + player.width / 2);
-            const dist = Math.abs(dx);
+            const startX = player.x + player.width / 2 + player.facing * 15;
+            const startY = player.y - 30;
 
             player.hasBall = false; player.isCharging = false; ball.holder = null;
-            ball.x = player.x + player.width / 2 + player.facing * 15;
-            ball.y = player.y - 30;
+            ball.x = startX; ball.y = startY;
 
             const isGreenZone = player.gauge >= 45 && player.gauge <= 75;
+            const targetX = targetHoop.rimX;
+            const targetY = targetHoop.rimY - 10;
+
+            // 포물선의 높이(Peak Height) 설정 (슛하는 순간 림보다 훨씬 위로 높게 솟구치도록 지정)
+            const apexY = Math.min(startY, targetY) - 180; 
+
+            // 공중체공 시간(Flight Time) 계산
+            const timeToApex = Math.sqrt((2 * (startY - apexY)) / gravity);
+            const timeFromApex = Math.sqrt((2 * (targetY - apexY)) / gravity);
+            const totalTime = timeToApex + timeFromApex;
 
             if (isGreenZone) {
                 ball.isPerfectShot = true;
                 ball.isFireBall = player.isFire;
 
-                const timeToRim = 32;
-                ball.vx = dx / timeToRim;
-                ball.vy = (targetHoop.rimY - 15 - ball.y - 0.5 * gravity * Math.pow(timeToRim, 2)) / timeToRim;
+                ball.vx = (targetX - startX) / totalTime;
+                ball.vy = -Math.sqrt(2 * gravity * (startY - apexY));
 
-                // 초록색 게이지 타이밍 성공 시 굵은 남성 음성 재생
                 playSound('green_giant');
-                screenShake = player.isFire ? 10 : 6;
-                addText(player.isFire ? "🔥 GREEN GIANT FIRE!" : "🥦 HO HO HO! GREEN GIANT!", player.x, player.y - 40, '#00e676', 1.6);
+                screenShake = player.isFire ? 12 : 8;
+                addText(player.isFire ? "🔥 HIGH ARC FIRE!" : "🥦 HO HO HO! GREEN GIANT!", player.x, player.y - 40, '#00e676', 1.6);
             } else {
                 ball.isPerfectShot = false;
-                let err = (player.gauge - 60) * 0.12;
-                ball.vx = (dx / dist) * (6.5 + dist * 0.005) + err;
-                ball.vy = -12.0; playSound('bounce');
+                let err = (player.gauge - 60) * 0.15;
+                ball.vx = ((targetX - startX) / totalTime) + err;
+                ball.vy = -Math.sqrt(2 * gravity * (startY - apexY)) + (Math.random() - 0.5) * 2;
+                playSound('bounce');
                 addText("MISS!", player.x, player.y - 30, '#aaa', 1.0);
             }
         }
@@ -501,7 +467,7 @@ game_html = """
             ball.rotation += ball.vx * 0.08;
 
             ball.trail.push({ x: ball.x, y: ball.y });
-            if (ball.trail.length > (ball.isFireBall ? 10 : 5)) ball.trail.shift();
+            if (ball.trail.length > (ball.isFireBall ? 14 : 8)) ball.trail.shift();
 
             if (ball.y + ball.radius >= groundY) {
                 ball.y = groundY - ball.radius; ball.vy *= -0.7; ball.vx *= 0.8;
@@ -519,10 +485,15 @@ game_html = """
                     ball.vx *= -0.8; ball.vy *= -0.5; playSound('bounce'); screenShake = 3;
                 }
 
-                if (distToRim <= 15 && ball.vy > 0) {
-                    hoop.netAnim = 18;
-                    playSound('goal'); screenShake = 12;
-                    addParticles(hoop.rimX, hoop.rimY, '#00e676', 25);
+                // 골인 성공 시 폭발 이펙트 발생
+                if (distToRim <= 16 && ball.vy > 0) {
+                    hoop.netAnim = 25;
+                    playSound('goal'); screenShake = 14;
+                    
+                    // 화려한 림 폭발 파티클 & 충격파 Ring 추가
+                    addParticles(hoop.rimX, hoop.rimY + 10, '#ffea00', 35);
+                    addParticles(hoop.rimX, hoop.rimY + 10, '#ff3d00', 25);
+                    addShockwave(hoop.rimX, hoop.rimY + 10, '#00e676');
 
                     let scorer = hoop.side === 'right' ? p1 : p2;
                     let opponent = hoop.side === 'right' ? p2 : p1;
@@ -537,7 +508,7 @@ game_html = """
                     document.getElementById('p1-combo').innerText = p1.isFire ? "🔥ON FIRE!" : "";
                     document.getElementById('p2-combo').innerText = p2.isFire ? "🔥ON FIRE!" : "";
 
-                    addText(ball.isFireBall ? "3PTS 🔥 SWISH!!" : "2PTS SWISH!!", hoop.rimX, hoop.rimY - 40, '#ffea00', 1.6);
+                    addText(ball.isFireBall ? "3PTS 🔥 PERFECT SWISH!!" : "2PTS SWISH!!", hoop.rimX, hoop.rimY - 40, '#ffea00', 1.8);
                     resetRoundPositions();
                 }
             });
@@ -612,24 +583,25 @@ game_html = """
                 ctx.lineTo(rimEndX, h.rimY);
                 ctx.stroke();
 
-                const netSwing = h.netAnim > 0 ? Math.sin(h.netAnim) * 6 : 0;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'; ctx.lineWidth = 1.8;
+                // 골인 시 그물 흔들림 애니메이션 대폭 강화
+                const netSwing = h.netAnim > 0 ? Math.sin(h.netAnim * 0.8) * 12 : 0;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; ctx.lineWidth = 2.2;
                 
                 const netTopLeft = h.rimX - 16;
                 const netTopRight = h.rimX + 16;
-                const netBotLeft = h.rimX - 9 + netSwing;
-                const netBotRight = h.rimX + 9 + netSwing;
-                const netBottomY = h.rimY + 32;
+                const netBotLeft = h.rimX - 10 + netSwing;
+                const netBotRight = h.rimX + 10 + netSwing;
+                const netBottomY = h.rimY + 36;
 
                 ctx.beginPath();
                 for(let i=0; i<=4; i++) {
                     let tx = netTopLeft + (i / 4) * 32;
-                    let bx = netBotLeft + (i / 4) * 18;
+                    let bx = netBotLeft + (i / 4) * 20;
                     ctx.moveTo(tx, h.rimY);
                     ctx.lineTo(bx, netBottomY);
                 }
                 ctx.moveTo(netTopLeft, h.rimY + 10); ctx.lineTo(netTopRight, h.rimY + 10);
-                ctx.moveTo(netTopLeft + 3, h.rimY + 20); ctx.lineTo(netTopRight - 3, h.rimY + 20);
+                ctx.moveTo(netTopLeft + 3, h.rimY + 22); ctx.lineTo(netTopRight - 3, h.rimY + 22);
                 ctx.stroke();
             });
         }
@@ -716,10 +688,22 @@ game_html = """
         }
 
         function drawBall() {
+            // 🏀 포물선 잔상 및 아크 가이드라인 그리기
+            if (!ball.holder && ball.trail.length > 1) {
+                ctx.strokeStyle = 'rgba(0, 230, 118, 0.3)';
+                ctx.lineWidth = 3; ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                ctx.moveTo(ball.trail[0].x, ball.trail[0].y);
+                for (let i = 1; i < ball.trail.length; i++) {
+                    ctx.lineTo(ball.trail[i].x, ball.trail[i].y);
+                }
+                ctx.stroke(); ctx.setLineDash([]);
+            }
+
             for (let i = 0; i < ball.trail.length; i++) {
                 const t = ball.trail[i];
-                ctx.fillStyle = ball.isFireBall ? `rgba(255, 234, 0, ${ (i + 1) / 10 })` : `rgba(255, 152, 0, ${ (i + 1) / 6 })`;
-                ctx.beginPath(); ctx.arc(t.x, t.y, ball.radius * ((i + 1) / 8), 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = ball.isFireBall ? `rgba(255, 234, 0, ${ (i + 1) / 14 })` : `rgba(255, 152, 0, ${ (i + 1) / 8 })`;
+                ctx.beginPath(); ctx.arc(t.x, t.y, ball.radius * ((i + 1) / 10), 0, Math.PI * 2); ctx.fill();
             }
 
             ctx.save(); ctx.translate(ball.x, ball.y); ctx.rotate(ball.rotation);
@@ -732,6 +716,17 @@ game_html = """
         }
 
         function drawUIEffects() {
+            // 충격파 Ring 렌더링
+            for (let i = shockwaves.length - 1; i >= 0; i--) {
+                const sw = shockwaves[i];
+                ctx.save();
+                ctx.strokeStyle = sw.color; ctx.lineWidth = 4; ctx.globalAlpha = sw.alpha;
+                ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2); ctx.stroke();
+                ctx.restore();
+                sw.radius += 3.5; sw.alpha -= 0.04;
+                if (sw.alpha <= 0) shockwaves.splice(i, 1);
+            }
+
             for (let i = floatingTexts.length - 1; i >= 0; i--) {
                 const ft = floatingTexts[i];
                 ctx.save(); ctx.globalAlpha = ft.alpha;
