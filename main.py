@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="2P Basketball - Enhanced Dunk & Dash Update", layout="wide")
+st.set_page_config(page_title="2P Basketball - Skills & Sound Update", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -31,10 +31,11 @@ game_html = """
         }
         #restart-btn:hover { transform: scale(1.05); }
         #controls-guide {
-            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+            position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
             display: flex; gap: 30px; color: #bbb; font-size: 13px;
-            background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 10px;
+            background: rgba(0,0,0,0.75); padding: 8px 20px; border-radius: 10px;
         }
+        .skill-badge { padding: 2px 6px; background: #e65100; color: #fff; border-radius: 4px; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -50,8 +51,8 @@ game_html = """
     </div>
 
     <div id="controls-guide">
-        <div><b class="p1-color">1P</b>: A/D(이동) | W(점프) | L-Shift(대쉬) | Space(골대근처:<b>덩크</b>/지상:<b>점프슛</b>)</div>
-        <div><b class="p2-color">2P</b>: ←/→(이동) | ↑(점프) | R-Shift/L(대쉬) | Enter(골대근처:<b>덩크</b>/지상:<b>점프슛</b>)</div>
+        <div><b class="p1-color">1P</b>: A/D(이동) | W(점프) | L-Shift(대쉬) | Space(슛/덩크) | <span class="skill-badge">E</span> 3점 강화</div>
+        <div><b class="p2-color">2P</b>: ←/→(이동) | ↑(점프) | R-Shift(대쉬) | Enter(슛/덩크) | <span class="skill-badge">K</span> 그림자 워프</div>
     </div>
 
     <div id="quarter-notice">
@@ -66,10 +67,78 @@ game_html = """
     </div>
 
     <script>
+        // --- SOUND SYSTEM (Web Audio API) ---
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioCtx();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            
+            if (type === 'bounce') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(120, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(now); osc.stop(now + 0.12);
+            } else if (type === 'jump') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(now); osc.stop(now + 0.15);
+            } else if (type === 'dunk') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.4);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(now); osc.stop(now + 0.4);
+            } else if (type === 'skill') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(now); osc.stop(now + 0.25);
+            } else if (type === 'goal') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+                osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(now); osc.stop(now + 0.4);
+            }
+        }
+
+        // --- GAME ENGINE ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const QUARTER_TIME = 60; // 쿼터 시간 60초 변경
+        const QUARTER_TIME = 60;
         let currentQuarter = 1;
         let p1Score = 0, p2Score = 0, timeLeft = QUARTER_TIME;
         let gameActive = true, timerInterval;
@@ -90,14 +159,16 @@ game_html = """
             x: P1_START_X, y: PLAYER_START_Y, width: 36, height: 70,
             color: '#e53935', jerseyNo: '23', vx: 0, vy: 0, isGrounded: false,
             hasBall: false, id: 1, armAngle: 0, shootAnimTimer: 0, facing: 1,
-            gauge: 0, gaugeDir: 1, isCharging: false, animFrame: 0, isDunking: false, isDashing: false
+            gauge: 0, gaugeDir: 1, isCharging: false, animFrame: 0, isDunking: false, isDashing: false,
+            skillCd: 0, skillActive: false
         };
 
         const p2 = {
             x: P2_START_X, y: PLAYER_START_Y, width: 36, height: 70,
             color: '#1e88e5', jerseyNo: '30', vx: 0, vy: 0, isGrounded: false,
             hasBall: false, id: 2, armAngle: 0, shootAnimTimer: 0, facing: -1,
-            gauge: 0, gaugeDir: 1, isCharging: false, animFrame: 0, isDunking: false, isDashing: false
+            gauge: 0, gaugeDir: 1, isCharging: false, animFrame: 0, isDunking: false, isDashing: false,
+            skillCd: 0, skillActive: false
         };
 
         const ball = {
@@ -110,66 +181,69 @@ game_html = """
 
         function init() {
             window.addEventListener('keydown', e => {
+                initAudio();
                 if (e.repeat) return;
                 keys[e.code] = true;
 
-                // 1P 슛/덩크 체크
+                // 1P 슛/덩크/스킬
                 if (e.code === 'Space' && p1.hasBall) {
-                    if (checkDunkCondition(p1)) {
-                        triggerDunk(p1);
-                    } else {
-                        p1.isCharging = true;
-                        p1.gauge = 0;
-                        p1.gaugeDir = 1;
-                    }
+                    if (checkDunkCondition(p1)) triggerDunk(p1);
+                    else { p1.isCharging = true; p1.gauge = 0; p1.gaugeDir = 1; }
                 }
-                // 2P 슛/덩크 체크
+                if (e.code === 'KeyE' && p1.skillCd <= 0) activateSkill(p1);
+
+                // 2P 슛/덩크/스킬
                 if (e.code === 'Enter' && p2.hasBall) {
-                    if (checkDunkCondition(p2)) {
-                        triggerDunk(p2);
-                    } else {
-                        p2.isCharging = true;
-                        p2.gauge = 0;
-                        p2.gaugeDir = 1;
-                    }
+                    if (checkDunkCondition(p2)) triggerDunk(p2);
+                    else { p2.isCharging = true; p2.gauge = 0; p2.gaugeDir = 1; }
                 }
+                if ((e.code === 'KeyK' || e.code === 'Slash') && p2.skillCd <= 0) activateSkill(p2);
             });
 
             window.addEventListener('keyup', e => {
                 keys[e.code] = false;
 
-                if (e.code === 'Space' && p1.hasBall && p1.isCharging) {
-                    shootBall(p1);
-                }
-                if (e.code === 'Enter' && p2.hasBall && p2.isCharging) {
-                    shootBall(p2);
-                }
+                if (e.code === 'Space' && p1.hasBall && p1.isCharging) shootBall(p1);
+                if (e.code === 'Enter' && p2.hasBall && p2.isCharging) shootBall(p2);
             });
 
             startTimer();
             requestAnimationFrame(gameLoop);
         }
 
+        function activateSkill(player) {
+            player.skillCd = 8.0; // 8초 쿨타임
+            playSound('skill');
+
+            if (player.id === 1) {
+                // 1P [3점 마스터]: 3점 라인 밖으로 이탈하며 다음 슛 게이지 완화
+                player.x = 240;
+                player.skillActive = true;
+                dunkEffectText = { text: "3PT SNIPER READY!", alpha: 1.0, x: player.x + 20, y: player.y - 30 };
+            } else {
+                // 2P [그림자 워프]: 순간 이동하여 반대편 공중으로 이동
+                player.x = p1.x + (player.facing * -90);
+                player.y = PLAYER_START_Y - 60;
+                player.vy = -5;
+                dunkEffectText = { text: "SHADOW WARP!", alpha: 1.0, x: player.x, y: player.y - 30 };
+            }
+        }
+
         function checkDunkCondition(player) {
-            // 공격 목표 골대 (1P -> 오른쪽 골대, 2P -> 왼쪽 골대)
             const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
-            const dx = Math.abs((player.x + player.width/2) - targetHoop.rimX);
-            
-            // 골대 수평거리 200px 이내면 지상이든 공중이든 덩크 가능하도록 완화
-            return dx < 200;
+            return Math.abs((player.x + player.width/2) - targetHoop.rimX) < 210;
         }
 
         function triggerDunk(player) {
             player.isDunking = true;
             player.isCharging = false;
-            // 덩크를 위해 골대로 강하게 뛰어올라감
-            player.vy = -13;
-            player.vx = player.id === 1 ? 5 : -5;
+            player.vy = -13.5;
+            player.vx = player.id === 1 ? 5.5 : -5.5;
+            playSound('jump');
         }
 
         function executeDunk(player) {
             const targetHoop = player.id === 1 ? hoops[1] : hoops[0];
-            
             player.hasBall = false;
             player.isDunking = false;
             player.shootAnimTimer = 20;
@@ -178,7 +252,9 @@ game_html = """
             ball.x = targetHoop.rimX;
             ball.y = targetHoop.rimY - 15;
             ball.vx = player.id === 1 ? 1 : -1;
-            ball.vy = 14; // 강력하게 아래로 내려찍음
+            ball.vy = 15;
+
+            playSound('dunk');
 
             dunkEffectText = {
                 text: "SLAM DUNK!!",
@@ -195,9 +271,10 @@ game_html = """
                 timeLeft--;
                 document.getElementById('timer').innerText = timeLeft;
                 
-                if (timeLeft <= 0) {
-                    handleQuarterEnd();
-                }
+                if (p1.skillCd > 0) p1.skillCd = Math.max(0, p1.skillCd - 1);
+                if (p2.skillCd > 0) p2.skillCd = Math.max(0, p2.skillCd - 1);
+
+                if (timeLeft <= 0) handleQuarterEnd();
             }, 1000);
         }
 
@@ -239,12 +316,10 @@ game_html = """
 
         function resetRoundPositions() {
             p1.x = P1_START_X; p1.y = PLAYER_START_Y; p1.vx = 0; p1.vy = 0;
-            p1.hasBall = false; p1.shootAnimTimer = 0; p1.facing = 1;
-            p1.isCharging = false; p1.gauge = 0; p1.isDunking = false;
+            p1.hasBall = false; p1.shootAnimTimer = 0; p1.facing = 1; p1.isCharging = false; p1.gauge = 0; p1.isDunking = false; p1.skillActive = false;
 
             p2.x = P2_START_X; p2.y = PLAYER_START_Y; p2.vx = 0; p2.vy = 0;
-            p2.hasBall = false; p2.shootAnimTimer = 0; p2.facing = -1;
-            p2.isCharging = false; p2.gauge = 0; p2.isDunking = false;
+            p2.hasBall = false; p2.shootAnimTimer = 0; p2.facing = -1; p2.isCharging = false; p2.gauge = 0; p2.isDunking = false; p2.skillActive = false;
 
             ball.x = 450; ball.y = 200; ball.vx = 0; ball.vy = 0;
             ball.holder = null; ball.trail = []; ball.rotation = 0;
@@ -265,9 +340,14 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 10;
             ball.y = player.y - 10;
 
-            const perfectMin = 65;
-            const perfectMax = 80;
+            let perfectMin = 65, perfectMax = 80;
+            if (player.skillActive) {
+                perfectMin = 30; perfectMax = 95; // 스킬 활성화 시 그린존 대폭 증가
+                player.skillActive = false;
+            }
+
             const powerRatio = player.gauge / 100;
+            playSound('jump');
 
             if (player.gauge >= perfectMin && player.gauge <= perfectMax) {
                 ball.vx = (dx / dist) * (6.2 + dist * 0.0082);
@@ -280,7 +360,6 @@ game_html = """
         }
 
         function updatePlayer(p, leftKey, rightKey, jumpKey, dashKey) {
-            // 대쉬 처리
             p.isDashing = keys[dashKey];
             const speed = p.isDashing ? 7.5 : 4.5;
 
@@ -291,19 +370,17 @@ game_html = """
             if (keys[jumpKey] && p.isGrounded && !p.isDunking) {
                 p.vy = -12;
                 p.isGrounded = false;
+                playSound('jump');
             }
 
             p.vy += gravity;
             p.x += p.vx;
             p.y += p.vy;
 
-            // 덩크 실행 중인 경우 골대와 가까워지면 덩크 발동
             if (p.isDunking) {
                 const targetHoop = p.id === 1 ? hoops[1] : hoops[0];
                 const distToRim = Math.hypot((p.x + p.width/2) - targetHoop.rimX, p.y - targetHoop.rimY);
-                if (distToRim < 60 || p.vy > 0) {
-                    executeDunk(p);
-                }
+                if (distToRim < 60 || p.vy > 0) executeDunk(p);
             }
 
             if (p.x < 0) p.x = 0;
@@ -317,7 +394,7 @@ game_html = """
             }
 
             if (p.isCharging && p.hasBall) {
-                p.gauge += p.gaugeDir * 2.8;
+                p.gauge += p.gaugeDir * 3.0;
                 if (p.gauge >= 100) { p.gauge = 100; p.gaugeDir = -1; }
                 if (p.gauge <= 0) { p.gauge = 0; p.gaugeDir = 1; }
             }
@@ -336,20 +413,16 @@ game_html = """
                     p.hasBall = true;
                 }
             } else if (ball.holder === p) {
-                // 드리블 애니메이션 적용 (이동 중일 때 공이 바운드됨)
                 const bounceY = (p.vx !== 0 && p.isGrounded) ? Math.abs(Math.sin(p.animFrame * 2)) * 18 : 0;
+                if (bounceY > 15) playSound('bounce');
                 ball.x = p.x + p.width / 2 + p.facing * 16;
                 ball.y = p.y + 15 + bounceY;
-                ball.vx = 0;
-                ball.vy = 0;
+                ball.vx = 0; ball.vy = 0;
             }
         }
 
         function updateBall() {
-            if (ball.holder) {
-                ball.trail = [];
-                return;
-            }
+            if (ball.holder) { ball.trail = []; return; }
 
             ball.vy += gravity;
             ball.x += ball.vx;
@@ -363,6 +436,7 @@ game_html = """
                 ball.y = groundY - ball.radius;
                 ball.vy *= -0.65;
                 ball.vx *= 0.8;
+                if (Math.abs(ball.vy) > 2) playSound('bounce');
             }
 
             if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= canvas.width) {
@@ -372,19 +446,13 @@ game_html = """
             hoops.forEach(hoop => {
                 const isLeftBb = hoop.side === 'left' && Math.abs(ball.x - hoop.x) < 15;
                 const isRightBb = hoop.side === 'right' && Math.abs(ball.x - hoop.x) < 15;
-                if ((isLeftBb || isRightBb) && ball.y > hoop.y && ball.y < hoop.y + 80) {
-                    ball.vx *= -0.7;
-                }
+                if ((isLeftBb || isRightBb) && ball.y > hoop.y && ball.y < hoop.y + 80) ball.vx *= -0.7;
 
                 const distToRim = Math.hypot(ball.x - hoop.rimX, ball.y - hoop.rimY);
                 if (distToRim < 18 && ball.vy > 0) {
-                    if (hoop.side === 'right') {
-                        p1Score += 2;
-                        document.getElementById('p1-score').innerText = p1Score;
-                    } else {
-                        p2Score += 2;
-                        document.getElementById('p2-score').innerText = p2Score;
-                    }
+                    playSound('goal');
+                    if (hoop.side === 'right') { p1Score += 2; document.getElementById('p1-score').innerText = p1Score; } 
+                    else { p2Score += 2; document.getElementById('p2-score').innerText = p2Score; }
                     resetRoundPositions();
                 }
             });
@@ -393,18 +461,12 @@ game_html = """
         function endGame() {
             gameActive = false;
             clearInterval(timerInterval);
+            playSound('goal');
             
             const winnerText = document.getElementById('winner-text');
-            if (p1Score > p2Score) {
-                winnerText.innerText = "PLAYER 1 WIN!";
-                winnerText.style.color = "#ff5252";
-            } else if (p2Score > p1Score) {
-                winnerText.innerText = "PLAYER 2 WIN!";
-                winnerText.style.color = "#448aff";
-            } else {
-                winnerText.innerText = "DRAW GAME!";
-                winnerText.style.color = "#ffeb3b";
-            }
+            if (p1Score > p2Score) { winnerText.innerText = "PLAYER 1 WIN!"; winnerText.style.color = "#ff5252"; } 
+            else if (p2Score > p1Score) { winnerText.innerText = "PLAYER 2 WIN!"; winnerText.style.color = "#448aff"; } 
+            else { winnerText.innerText = "DRAW GAME!"; winnerText.style.color = "#ffeb3b"; }
 
             document.getElementById('final-p1').innerText = p1Score;
             document.getElementById('final-p2').innerText = p2Score;
@@ -415,91 +477,76 @@ game_html = """
             ctx.save();
             ctx.translate(p.x + p.width / 2, p.y);
 
-            // 대쉬 잔상 이펙트
             if (p.isDashing && p.vx !== 0) {
                 ctx.fillStyle = p.color === '#e53935' ? 'rgba(255, 82, 82, 0.3)' : 'rgba(68, 138, 255, 0.3)';
                 ctx.fillRect(-p.facing * 15 - 13, 10, 26, 40);
             }
 
-            const runCycle = Math.sin(p.animFrame * 3); // 뛰는 애니메이션 용 삼각함수
+            const runCycle = Math.sin(p.animFrame * 3);
+            ctx.fillStyle = '#212121';
+            ctx.fillRect(-10 + runCycle * 8, p.height - 10, 10, 10);
+            ctx.fillRect(2 - runCycle * 8, p.height - 10, 10, 10);
 
-            // 1. 다리 / 신발 (뛰는 모션 적용)
-            ctx.fillStyle = '#212121'; // 농구화
-            const leg1Offset = runCycle * 8;
-            const leg2Offset = -runCycle * 8;
+            ctx.fillStyle = '#ffcc80';
+            ctx.fillRect(-8 + runCycle * 8, p.height - 24, 6, 15);
+            ctx.fillRect(4 - runCycle * 8, p.height - 24, 6, 15);
 
-            ctx.fillRect(-10 + leg1Offset, p.height - 10, 10, 10);
-            ctx.fillRect(2 + leg2Offset, p.height - 10, 10, 10);
-
-            ctx.fillStyle = '#ffcc80'; // 피부톤 (다리)
-            ctx.fillRect(-8 + leg1Offset, p.height - 24, 6, 15);
-            ctx.fillRect(4 + leg2Offset, p.height - 24, 6, 15);
-
-            // 2. 유니폼 바지
             ctx.fillStyle = p.color;
             ctx.fillRect(-13, p.height - 38, 26, 16);
-
-            // 3. 유니폼 상의
             ctx.fillRect(-14, 20, 28, 24);
 
-            // 등번호
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 12px Arial';
             ctx.textAlign = 'center';
             ctx.fillText(p.jerseyNo, 0, 37);
 
-            // 4. 머리 / 피부
             ctx.fillStyle = '#ffcc80';
             ctx.beginPath();
             ctx.arc(0, 10, 11, 0, Math.PI * 2);
             ctx.fill();
 
-            // 헤드밴드
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = p.skillActive ? '#ffeb3b' : '#ffffff';
             ctx.fillRect(-11, 3, 22, 5);
 
-            // 눈
             ctx.fillStyle = '#111';
             ctx.fillRect(p.facing * 4, 8, 3, 3);
 
-            // 5. 팔 (달릴 때 팔 흔들림 적용)
             ctx.strokeStyle = '#ffcc80';
             ctx.lineWidth = 5;
             ctx.beginPath();
             ctx.moveTo(0, 24);
             
-            let armX, armY;
-            if (p.hasBall) {
-                armX = Math.cos(p.armAngle) * 22 * p.facing;
-                armY = 24 + Math.sin(p.armAngle) * 22;
-            } else {
-                armX = Math.sin(p.animFrame * 3) * 12 * p.facing;
-                armY = 24 + 15;
-            }
+            let armX = p.hasBall ? Math.cos(p.armAngle) * 22 * p.facing : Math.sin(p.animFrame * 3) * 12 * p.facing;
+            let armY = p.hasBall ? 24 + Math.sin(p.armAngle) * 22 : 39;
             ctx.lineTo(armX, armY);
             ctx.stroke();
 
             ctx.restore();
 
+            // 스킬 쿨타임 UI 표시
+            ctx.fillStyle = p.skillCd > 0 ? '#888' : '#ff9800';
+            ctx.font = 'bold 11px Arial';
+            ctx.fillText(p.skillCd > 0 ? `SKILL: ${Math.ceil(p.skillCd)}s` : 'SKILL READY!', p.x - 5, p.y - 12);
+
             // 슛 게이지
             if (p.hasBall && p.isCharging) {
-                const gaugeWidth = 60;
-                const gaugeHeight = 10;
-                const gx = p.x + p.width / 2 - gaugeWidth / 2;
+                const gx = p.x + p.width / 2 - 30;
                 const gy = p.y - 25;
+                let minZone = p.skillActive ? 30 : 65;
+                let maxZone = p.skillActive ? 95 : 80;
 
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(gx - 2, gy - 2, gaugeWidth + 4, gaugeHeight + 4);
+                ctx.fillRect(gx - 2, gy - 2, 64, 14);
 
                 ctx.fillStyle = '#ff9800';
-                ctx.fillRect(gx, gy, gaugeWidth, gaugeHeight);
+                ctx.fillRect(gx, gy, 60, 10);
 
-                ctx.fillStyle = '#4caf50';
-                ctx.fillRect(gx + gaugeWidth * 0.65, gy, gaugeWidth * 0.15, gaugeHeight);
+                ctx.fillStyle = '#4caf50'; // 그린존
+                ctx.fillRect(gx + (minZone/100)*60, gy, ((maxZone - minZone)/100)*60, 10);
 
-                const barX = gx + (p.gauge / 100) * gaugeWidth;
+                const barX = gx + (p.gauge / 100) * 60;
                 ctx.fillStyle = '#ffffff';
-                ctx.fillRect(barX - 1.5, gy - 2, 3, gaugeHeight + 4);
+                ctx.fillRect(barX - 1.5, gy - 2, 3, 14);
             }
         }
 
@@ -525,10 +572,8 @@ game_html = """
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
-            ctx.moveTo(-ball.radius, 0);
-            ctx.lineTo(ball.radius, 0);
-            ctx.moveTo(0, -ball.radius);
-            ctx.lineTo(0, ball.radius);
+            ctx.moveTo(-ball.radius, 0); ctx.lineTo(ball.radius, 0);
+            ctx.moveTo(0, -ball.radius); ctx.lineTo(0, ball.radius);
             ctx.stroke();
 
             ctx.restore();
@@ -551,7 +596,7 @@ game_html = """
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 코트 바닥
+            // 코트
             ctx.fillStyle = '#3e2723';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
             ctx.fillStyle = '#ffb74d';
@@ -560,12 +605,8 @@ game_html = """
             // 3점선
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
             ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(50, groundY, 200, -Math.PI/2, 0);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(850, groundY, 200, -Math.PI, -Math.PI/2);
-            ctx.stroke();
+            ctx.beginPath(); ctx.arc(50, groundY, 200, -Math.PI/2, 0); ctx.stroke();
+            ctx.beginPath(); ctx.arc(850, groundY, 200, -Math.PI, -Math.PI/2); ctx.stroke();
 
             // 골대
             hoops.forEach(h => {
@@ -574,9 +615,7 @@ game_html = """
                 
                 ctx.strokeStyle = '#e65100';
                 ctx.lineWidth = 5;
-                ctx.beginPath();
-                ctx.arc(h.rimX, h.rimY, 15, 0, Math.PI);
-                ctx.stroke();
+                ctx.beginPath(); ctx.arc(h.rimX, h.rimY, 15, 0, Math.PI); ctx.stroke();
             });
 
             drawPlayer(p1);
