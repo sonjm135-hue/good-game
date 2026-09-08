@@ -54,9 +54,9 @@ game_html = """
         <h1 style="color: #d1b838; font-size: 60px; margin-bottom: 0px; letter-spacing: 6px;">THE BACKROOMS</h1>
         <p style="font-size: 16px; color: #a39655; margin-top: 15px; max-width: 600px; line-height: 1.6;">
             백룸의 깊은 층으로 떨어졌습니다.<br>
-            • <b>[Q] / [E] 키로 시점을 조절</b>할 수 있습니다.<br>
-            • 대형 미로를 탐색하고 <b>Level 0부터 Level 3까지 탈출</b>하세요.<br>
-            • <b>C키로 숙여 개구멍을 통과</b>하고 손전등 빛을 조심하세요!
+            • <b>[Q] / [E] 키로 시점을 회전</b>하세요.<br>
+            • 각 레벨마다 달라지는 <b>괴물과 맵 구조</b>를 파악하세요.<br>
+            • 벽에 부딪히지 않게 조심하며 <b>Level 0부터 Level 3까지 탈출</b>하세요!
         </p>
         <button id="start-btn">NOCLIP IN</button>
     </div>
@@ -87,21 +87,20 @@ game_html = """
         let keyMesh, exitDoorMesh, monsterMesh, monsterEyeMat;
         let isChasing = false;
 
+        // 물리 충돌을 처리할 벽 객체 바운딩 박스 리스트
+        let wallBoxes = [];
+
+        // 개구멍 구역 (특수 벽)
         const holeBounds = { xMin: -11.0, xMax: -9.0, zMin: -8.0, zMax: 2.0 };
 
-        const waypoints = [
-            new THREE.Vector3(-30, 0, -30),
-            new THREE.Vector3(30, 0, -30),
-            new THREE.Vector3(30, 0, 30),
-            new THREE.Vector3(-30, 0, 30)
-        ];
+        let waypoints = [];
         let currentWaypointIndex = 0;
 
         const levelThemes = [
-            { name: "LEVEL 0: THE LOBBY", bg: 0x2b2716, wall: 0xa89f5a, floor: 0x59522c, monsterSpeed: 3.5 },
-            { name: "LEVEL 1: HABITABLE ZONE", bg: 0x11161a, wall: 0x3d484f, floor: 0x22292e, monsterSpeed: 4.2 },
-            { name: "LEVEL 2: PIPE DREAMS", bg: 0x1c120c, wall: 0x593d2b, floor: 0x302116, monsterSpeed: 4.8 },
-            { name: "LEVEL 3: ELECTRICAL STATION", bg: 0x0d0d0d, wall: 0x2b2b2b, floor: 0x1a1a1a, monsterSpeed: 5.5 }
+            { name: "LEVEL 0: THE LOBBY", bg: 0x2b2716, wall: 0xa89f5a, floor: 0x59522c, monsterSpeed: 3.5, monsterName: "Bacteria" },
+            { name: "LEVEL 1: HABITABLE ZONE", bg: 0x0a1014, wall: 0x2c3840, floor: 0x182026, monsterSpeed: 4.2, monsterName: "Smiler" },
+            { name: "LEVEL 2: PIPE DREAMS", bg: 0x1a0f0a, wall: 0x4a2e1d, floor: 0x29180e, monsterSpeed: 4.8, monsterName: "Skin-Stealer" },
+            { name: "LEVEL 3: ELECTRICAL STATION", bg: 0x080808, wall: 0x222222, floor: 0x111111, monsterSpeed: 5.5, monsterName: "Hound" }
         ];
 
         const startScreen = document.getElementById('start-screen');
@@ -119,26 +118,18 @@ game_html = """
             scene = new THREE.Scene();
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 15);
+            camera.position.set(0, 1.6, 25);
             camera.rotation.order = 'YXZ';
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             container.appendChild(renderer.domElement);
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-            scene.add(ambientLight);
-
-            mainFluorescentLight = new THREE.PointLight(0xfff5c0, 1.5, 70);
-            mainFluorescentLight.position.set(0, 4.8, 0);
-            scene.add(mainFluorescentLight);
-
             flashlight = new THREE.SpotLight(0xfff8d6, 6, 40, Math.PI / 3.5, 0.5, 1);
             camera.add(flashlight);
             flashlight.position.set(0, 0, 0);
             flashlight.target.position.set(0, 0, -1);
             camera.add(flashlight.target);
-            scene.add(camera);
 
             loadLevel(0);
 
@@ -166,6 +157,7 @@ game_html = """
             currentLevel = levelIdx;
             hasKey = false;
             isChasing = false;
+            wallBoxes = [];
             
             while(scene.children.length > 0){ 
                 scene.remove(scene.children[0]); 
@@ -185,6 +177,7 @@ game_html = """
             mainFluorescentLight.position.set(0, 4.8, 0);
             scene.add(mainFluorescentLight);
 
+            // 대형 바닥 & 천장
             const floorGeo = new THREE.PlaneGeometry(80, 80);
             const floorMat = new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.8 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -198,8 +191,10 @@ game_html = """
             ceil.rotation.x = Math.PI / 2;
             scene.add(ceil);
 
-            buildLargeMaze(theme.wall);
+            // 레벨별 전용 맵 구축
+            buildLevelMaze(currentLevel, theme.wall);
 
+            // 탈출 비상문
             const doorGeo = new THREE.BoxGeometry(2.5, 4.0, 0.2);
             const doorMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
             exitDoorMesh = new THREE.Mesh(doorGeo, doorMat);
@@ -210,64 +205,179 @@ game_html = """
             doorLight.position.set(0, 4.0, 37.5);
             scene.add(doorLight);
 
+            // 아몬드 워터 (열쇠)
             const keyGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 8);
             const keyMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0x888800 });
             keyMesh = new THREE.Mesh(keyGeo, keyMat);
             keyMesh.position.set(32, 0.6, -32);
             scene.add(keyMesh);
 
-            createBacteriaEntity();
+            // 레벨별 괴물 생성
+            createMonsterForLevel(currentLevel);
 
-            camera.position.set(0, 1.6, 25);
+            camera.position.set(0, 1.6, 32);
             gameStatus.innerText = `🎯 [${theme.name}] 구석의 아몬드 워터를 찾은 후 비상문으로 탈출하세요!`;
             gameStatus.style.color = "#ffcc00";
         }
 
-        function buildLargeMaze(wallColor) {
-            const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.8 });
+        // 벽 생성 및 물리 충돌 보더 등록 함수
+        function createWall(x, y, z, w, h, d, color) {
+            const wallMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+            const geo = new THREE.BoxGeometry(w, h, d);
+            const wall = new THREE.Mesh(geo, wallMat);
+            wall.position.set(x, y, z);
+            scene.add(wall);
 
-            const wallData = [
-                [0, 2.5, -39.5, 80, 5, 0.5],
-                [0, 2.5, 39.5, 80, 5, 0.5],
-                [-39.5, 2.5, 0, 0.5, 5, 80],
-                [39.5, 2.5, 0, 0.5, 5, 80],
-                [15, 2.5, -15, 0.5, 5, 40],
-                [-15, 2.5, 15, 40, 5, 0.5],
-                [20, 2.5, 15, 0.5, 5, 30],
-                [-20, 2.5, -15, 30, 5, 0.5],
-                [0, 2.5, -25, 0.5, 5, 30]
-            ];
-
-            wallData.forEach(w => {
-                const geo = new THREE.BoxGeometry(w[3], w[4], w[5]);
-                const wall = new THREE.Mesh(geo, wallMat);
-                wall.position.set(w[0], w[1], w[2]);
-                scene.add(wall);
-            });
-
-            const holeWallGeo = new THREE.BoxGeometry(20, 3.8, 0.5);
-            const holeWall = new THREE.Mesh(holeWallGeo, wallMat);
-            holeWall.position.set(-10, 3.1, -3);
-            scene.add(holeWall);
+            // 물리 판정 박스 추가
+            const box = new THREE.Box3().setFromObject(wall);
+            wallBoxes.push(box);
         }
 
-        function createBacteriaEntity() {
+        // 레벨별 독특한 맵 레이아웃 생성
+        function buildLevelMaze(level, wallColor) {
+            // 외곽 벽 공통
+            createWall(0, 2.5, -39.5, 80, 5, 0.8, wallColor);
+            createWall(0, 2.5, 39.5, 80, 5, 0.8, wallColor);
+            createWall(-39.5, 2.5, 0, 0.8, 5, 80, wallColor);
+            createWall(39.5, 2.5, 0, 0.8, 5, 80, wallColor);
+
+            if (level === 0) {
+                // Level 0: 표준 격자 미로
+                createWall(15, 2.5, -15, 0.8, 5, 40, wallColor);
+                createWall(-15, 2.5, 15, 40, 5, 0.8, wallColor);
+                createWall(20, 2.5, 15, 0.8, 5, 30, wallColor);
+                createWall(-20, 2.5, -15, 30, 5, 0.8, wallColor);
+                createWall(0, 2.5, -25, 0.8, 5, 30, wallColor);
+
+                waypoints = [
+                    new THREE.Vector3(-30, 0, -30),
+                    new THREE.Vector3(30, 0, -30),
+                    new THREE.Vector3(30, 0, 30),
+                    new THREE.Vector3(-30, 0, 30)
+                ];
+            } else if (level === 1) {
+                // Level 1: 긴 공장형 일자 복도 및 창고
+                createWall(-10, 2.5, 0, 0.8, 5, 60, wallColor);
+                createWall(10, 2.5, 0, 0.8, 5, 60, wallColor);
+                createWall(-25, 2.5, -20, 30, 5, 0.8, wallColor);
+                createWall(25, 2.5, 20, 30, 5, 0.8, wallColor);
+
+                waypoints = [
+                    new THREE.Vector3(0, 0, -30),
+                    new THREE.Vector3(0, 0, 30),
+                    new THREE.Vector3(25, 0, 0),
+                    new THREE.Vector3(-25, 0, 0)
+                ];
+            } else if (level === 2) {
+                // Level 2: 구불구불한 좁은 지하 통로
+                createWall(0, 2.5, 10, 50, 5, 0.8, wallColor);
+                createWall(-10, 2.5, -10, 50, 5, 0.8, wallColor);
+                createWall(20, 2.5, -25, 0.8, 5, 30, wallColor);
+                createWall(-20, 2.5, 25, 0.8, 5, 30, wallColor);
+
+                waypoints = [
+                    new THREE.Vector3(-30, 0, 20),
+                    new THREE.Vector3(30, 0, -20),
+                    new THREE.Vector3(0, 0, -30),
+                    new THREE.Vector3(0, 0, 30)
+                ];
+            } else if (level === 3) {
+                // Level 3: 발전소 고난도 세밀 미로
+                createWall(-15, 2.5, 0, 0.8, 5, 40, wallColor);
+                createWall(15, 2.5, 0, 0.8, 5, 40, wallColor);
+                createWall(0, 2.5, -15, 30, 5, 0.8, wallColor);
+                createWall(0, 2.5, 15, 30, 5, 0.8, wallColor);
+                createWall(-25, 2.5, -25, 20, 5, 0.8, wallColor);
+                createWall(25, 2.5, 25, 20, 5, 0.8, wallColor);
+
+                waypoints = [
+                    new THREE.Vector3(-30, 0, -30),
+                    new THREE.Vector3(30, 0, -30),
+                    new THREE.Vector3(30, 0, 30),
+                    new THREE.Vector3(-30, 0, 30)
+                ];
+            }
+
+            // 개구멍 벽 (공통 적용)
+            createWall(-10, 3.1, -3, 20, 3.8, 0.8, wallColor);
+        }
+
+        // 레벨별 개성 있는 괴물 생성
+        function createMonsterForLevel(level) {
             monsterMesh = new THREE.Group();
 
-            const bodyGeo = new THREE.CylinderGeometry(0.3, 0.4, 3.2, 6);
-            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 });
-            const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.y = 1.6;
-            monsterMesh.add(body);
+            if (level === 0) {
+                // Level 0: Bacteria (기본 키 큰 기형체)
+                const bodyGeo = new THREE.CylinderGeometry(0.3, 0.4, 3.2, 6);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 1.6;
+                monsterMesh.add(body);
 
-            const eyeGeo = new THREE.SphereGeometry(0.12, 6, 6);
-            monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            const eye1 = new THREE.Mesh(eyeGeo, monsterEyeMat);
-            const eye2 = new THREE.Mesh(eyeGeo, monsterEyeMat);
-            eye1.position.set(-0.15, 2.9, -0.25);
-            eye2.position.set(0.15, 2.9, -0.25);
-            monsterMesh.add(eye1);
-            monsterMesh.add(eye2);
+                const eyeGeo = new THREE.SphereGeometry(0.12, 6, 6);
+                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const eye1 = new THREE.Mesh(eyeGeo, monsterEyeMat);
+                const eye2 = new THREE.Mesh(eyeGeo, monsterEyeMat);
+                eye1.position.set(-0.15, 2.9, -0.25);
+                eye2.position.set(0.15, 2.9, -0.25);
+                monsterMesh.add(eye1);
+                monsterMesh.add(eye2);
+
+            } else if (level === 1) {
+                // Level 1: Smiler (얼굴만 어둠 속에서 빛나는 괴물)
+                const faceGeo = new THREE.SphereGeometry(1.2, 16, 16);
+                const faceMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+                const face = new THREE.Mesh(faceGeo, faceMat);
+                face.position.y = 1.8;
+                monsterMesh.add(face);
+
+                const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
+                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const eye1 = new THREE.Mesh(eyeGeo, monsterEyeMat);
+                const eye2 = new THREE.Mesh(eyeGeo, monsterEyeMat);
+                eye1.position.set(-0.4, 2.0, -1.0);
+                eye2.position.set(0.4, 2.0, -1.0);
+                monsterMesh.add(eye1);
+                monsterMesh.add(eye2);
+
+            } else if (level === 2) {
+                // Level 2: Skin-Stealer (긴 왜곡 팔다리를 가진 괴물)
+                const bodyGeo = new THREE.BoxGeometry(0.8, 2.2, 0.5);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3d2011, roughness: 0.9 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 1.5;
+                monsterMesh.add(body);
+
+                const armGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.5);
+                const arm1 = new THREE.Mesh(armGeo, bodyMat);
+                const arm2 = new THREE.Mesh(armGeo, bodyMat);
+                arm1.position.set(-0.6, 1.2, -0.2);
+                arm1.rotation.z = Math.PI / 4;
+                arm2.position.set(0.6, 1.2, -0.2);
+                arm2.rotation.z = -Math.PI / 4;
+                monsterMesh.add(arm1);
+                monsterMesh.add(arm2);
+
+                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+                const headGeo = new THREE.SphereGeometry(0.25, 8, 8);
+                const head = new THREE.Mesh(headGeo, monsterEyeMat);
+                head.position.set(0, 2.6, -0.2);
+                monsterMesh.add(head);
+
+            } else if (level === 3) {
+                // Level 3: Hound (사족보행 맹수형 괴물)
+                const bodyGeo = new THREE.BoxGeometry(0.9, 0.7, 2.2);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.6;
+                monsterMesh.add(body);
+
+                monsterEyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
+                const eye = new THREE.Mesh(eyeGeo, monsterEyeMat);
+                eye.position.set(0, 0.8, -1.1);
+                monsterMesh.add(eye);
+            }
 
             monsterMesh.position.copy(waypoints[0]);
             scene.add(monsterMesh);
@@ -300,6 +410,21 @@ game_html = """
             }
         }
 
+        // 강화된 AABB 물리 충돌 검사 (벽 뚫림 방지)
+        function checkWallCollision(targetPos, radius = 0.6) {
+            const playerBox = new THREE.Box3(
+                new THREE.Vector3(targetPos.x - radius, 0, targetPos.z - radius),
+                new THREE.Vector3(targetPos.x + radius, 4.0, targetPos.z + radius)
+            );
+
+            for (let i = 0; i < wallBoxes.length; i++) {
+                if (playerBox.intersectsBox(wallBoxes[i])) {
+                    return true; // 충돌 발생
+                }
+            }
+            return false;
+        }
+
         function animate() {
             requestAnimationFrame(animate);
 
@@ -311,10 +436,10 @@ game_html = """
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
-            // [Q, E 키를 통한 시점 회전]
+            // Q, E 키 시점 회전
             const rotateSpeed = 1.8 * delta;
-            if (keys['KeyQ']) camera.rotation.y += rotateSpeed; // Q: 좌회전
-            if (keys['KeyE']) camera.rotation.y -= rotateSpeed; // E: 우회전
+            if (keys['KeyQ']) camera.rotation.y += rotateSpeed;
+            if (keys['KeyE']) camera.rotation.y -= rotateSpeed;
 
             if (Math.random() < 0.03) {
                 mainFluorescentLight.intensity = Math.random() * 0.8 + 0.2;
@@ -327,43 +452,58 @@ game_html = """
 
             const moveSpeed = (isCrouching ? 3.0 : 6.0) * delta;
             
-            const oldX = camera.position.x;
-            const oldZ = camera.position.z;
+            // 물리 충돌을 고려한 독립 축 이동 알고리즘 (벽 비벼서 이동 가능)
+            const forwardDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            forwardDir.y = 0; forwardDir.normalize();
 
-            if (keys['KeyW'] || keys['ArrowUp']) camera.translateZ(-moveSpeed);
-            if (keys['KeyS'] || keys['ArrowDown']) camera.translateZ(moveSpeed);
-            if (keys['KeyA'] || keys['ArrowLeft']) camera.translateX(-moveSpeed);
-            if (keys['KeyD'] || keys['ArrowRight']) camera.translateX(moveSpeed);
+            const sideDir = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            sideDir.y = 0; sideDir.normalize();
 
+            let moveVector = new THREE.Vector3();
+
+            if (keys['KeyW'] || keys['ArrowUp']) moveVector.addScaledVector(forwardDir, moveSpeed);
+            if (keys['KeyS'] || keys['ArrowDown']) moveVector.addScaledVector(forwardDir, -moveSpeed);
+            if (keys['KeyA'] || keys['ArrowLeft']) moveVector.addScaledVector(sideDir, -moveSpeed);
+            if (keys['KeyD'] || keys['ArrowRight']) moveVector.addScaledVector(sideDir, moveSpeed);
+
+            // X축 이동 및 충돌 체크
+            const nextPosX = new THREE.Vector3(camera.position.x + moveVector.x, camera.position.y, camera.position.z);
+            if (!checkWallCollision(nextPosX)) {
+                camera.position.x = nextPosX.x;
+            }
+
+            // Z축 이동 및 충돌 체크
+            const nextPosZ = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z + moveVector.z);
+            if (!checkWallCollision(nextPosZ)) {
+                camera.position.z = nextPosZ.z;
+            }
+
+            // [개구멍 판정]
             if (
                 camera.position.x > holeBounds.xMin && camera.position.x < holeBounds.xMax &&
                 camera.position.z > holeBounds.zMin && camera.position.z < holeBounds.zMax
             ) {
                 if (camera.position.y > 1.0) {
-                    camera.position.x = oldX;
-                    camera.position.z = oldZ;
+                    camera.position.z += (camera.position.z > -3 ? 0.2 : -0.2);
                 }
             }
-
-            camera.position.x = Math.max(-38, Math.min(38, camera.position.x));
-            camera.position.z = Math.max(-38, Math.min(38, camera.position.z));
 
             // [괴물 AI]
             const distToPlayer = monsterMesh.position.distanceTo(camera.position);
             const currentSpeed = levelThemes[currentLevel].monsterSpeed;
 
-            if (isFlashlightOn && distToPlayer < 15.0) {
+            if (isFlashlightOn && distToPlayer < 16.0) {
                 if (!isChasing) {
                     isChasing = true;
-                    monsterEyeMat.color.setHex(0xff0000);
-                    gameStatus.innerText = "🚨 괴물이 당신을 감지했습니다!";
+                    if(monsterEyeMat) monsterEyeMat.color.setHex(0xff0000);
+                    gameStatus.innerText = `🚨 [${levelThemes[currentLevel].monsterName}] 괴물이 당신을 감지했습니다!`;
                     gameStatus.style.color = "#ff0000";
                 }
             } else if (!isFlashlightOn && distToPlayer > 12.0) {
                 if (isChasing) {
                     isChasing = false;
-                    monsterEyeMat.color.setHex(0xffffff);
-                    gameStatus.innerText = "⚠️ 괴물이 시야를 잃었습니다.";
+                    if(monsterEyeMat) monsterEyeMat.color.setHex(0xffffff);
+                    gameStatus.innerText = "⚠️ 괴물이 추적을 멈췄습니다.";
                     gameStatus.style.color = "#ffaa00";
                 }
             }
@@ -372,7 +512,11 @@ game_html = """
                 const dir = new THREE.Vector3().subVectors(camera.position, monsterMesh.position);
                 dir.y = 0;
                 dir.normalize();
-                monsterMesh.position.addScaledVector(dir, currentSpeed * delta);
+                
+                const nextMonsterPos = monsterMesh.position.clone().addScaledVector(dir, currentSpeed * delta);
+                if (!checkWallCollision(nextMonsterPos, 0.4)) {
+                    monsterMesh.position.copy(nextMonsterPos);
+                }
                 monsterMesh.lookAt(camera.position.x, monsterMesh.position.y, camera.position.z);
             } else {
                 const targetWaypoint = waypoints[currentWaypointIndex];
@@ -389,15 +533,17 @@ game_html = """
                 }
             }
 
+            // 사망 판정
             if (distToPlayer < 1.8) {
                 gameOver = true;
                 endScreen.style.display = 'flex';
                 endScreen.style.background = '#110000';
                 endTitle.innerText = "YOU DIED";
                 endTitle.style.color = "#8b0000";
-                endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 잡혔습니다...`;
+                endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 ${levelThemes[currentLevel].monsterName}에게 잡혔습니다...`;
             }
 
+            // 레벨 클리어 판정
             const distDoor = camera.position.distanceTo(exitDoorMesh.position);
             if (distDoor < 3.0 && hasKey) {
                 if (currentLevel < maxLevel) {
@@ -408,7 +554,7 @@ game_html = """
                     endScreen.style.background = '#0a1a0a';
                     endTitle.innerText = "ALL LEVELS ESCAPED!";
                     endTitle.style.color = "#00ff00";
-                    endDesc.innerText = "🎉 모든 레벨을 돌파하고 백룸에서 최종 탈출했습니다!";
+                    endDesc.innerText = "🎉 백룸의 모든 레벨과 괴물들을 따돌리고 최종 탈출했습니다!";
                 }
             }
 
