@@ -1,7 +1,26 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="NBA Superstars 2P - Enhanced Hoop", layout="wide")
+st.set_page_config(page_title="NBA Superstars 2P - Fullscreen Fixed", layout="wide")
+
+# Streamlit 기본 여백 및 패딩 제거
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 0rem !important;
+            padding-bottom: 0rem !important;
+            padding-left: 0rem !important;
+            padding-right: 0rem !important;
+            max-width: 100% !important;
+        }
+        iframe {
+            display: block;
+            border: none;
+        }
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
 
 game_html = """
 <!DOCTYPE html>
@@ -9,28 +28,40 @@ game_html = """
 <head>
     <meta charset="UTF-8">
     <style>
-        body { margin: 0; overflow: hidden; background-color: #0d0e15; font-family: 'Impact', 'Arial Black', sans-serif; user-select: none; }
-        #canvas-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; }
-        canvas { background: #141520; border-bottom: 10px solid #c5a059; box-shadow: 0 0 35px rgba(197, 160, 89, 0.3); }
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #0d0e15;
+            font-family: 'Impact', 'Arial Black', sans-serif; user-select: none;
+        }
+        #canvas-container {
+            width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            position: relative; background: #0d0e15;
+        }
+        canvas {
+            background: #141520;
+            box-shadow: 0 0 35px rgba(197, 160, 89, 0.3);
+            display: block;
+        }
         
         #ui {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 25px; color: #fff; font-size: 22px; font-weight: bold; align-items: center;
-            background: rgba(11, 12, 16, 0.92); padding: 10px 30px; border-radius: 20px; z-index: 10; border: 2px solid #c5a059;
+            display: flex; gap: 20px; color: #fff; font-size: 20px; font-weight: bold; align-items: center;
+            background: rgba(11, 12, 16, 0.92); padding: 8px 25px; border-radius: 20px; z-index: 10; border: 2px solid #c5a059;
             box-shadow: 0 0 20px rgba(0,0,0,0.8);
         }
         .p1-color { color: #ffc72c; text-shadow: 0 0 10px #1d428a; }
         .p2-color { color: #fdb927; text-shadow: 0 0 10px #552583; }
-        .q-badge { background: #ff3d00; color: #fff; padding: 4px 12px; border-radius: 8px; font-size: 16px; letter-spacing: 1px; }
-        .fire-text { color: #ffea00; animation: blink 0.3s infinite alternate; font-size: 16px; }
+        .q-badge { background: #ff3d00; color: #fff; padding: 3px 10px; border-radius: 6px; font-size: 15px; letter-spacing: 1px; }
+        .fire-text { color: #ffea00; animation: blink 0.3s infinite alternate; font-size: 15px; }
 
         @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
 
-        /* 전체화면 버튼 스타일 */
         #fs-btn {
             background: #c5a059; color: #000; border: none; padding: 6px 14px;
             border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px;
-            transition: 0.2s;
+            transition: 0.2s; outline: none;
         }
         #fs-btn:hover { background: #ffea00; transform: scale(1.05); }
 
@@ -45,14 +76,14 @@ game_html = """
         #restart-btn {
             margin-top: 30px; padding: 15px 45px; font-size: 26px; font-weight: bold;
             color: #000; background: #c5a059; border: none; border-radius: 12px; cursor: pointer;
-            box-shadow: 0 0 20px #c5a059; transition: 0.15s;
+            box-shadow: 0 0 20px #c5a059; transition: 0.15s; outline: none;
         }
         #restart-btn:hover { transform: scale(1.1); background: #ffea00; }
 
         #controls-guide {
-            position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 25px; color: #fff; font-size: 13px; font-family: sans-serif;
-            background: rgba(0,0,0,0.85); padding: 8px 25px; border-radius: 10px; border: 1px solid #444; align-items: center;
+            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 20px; color: #fff; font-size: 12px; font-family: sans-serif;
+            background: rgba(0,0,0,0.85); padding: 6px 20px; border-radius: 10px; border: 1px solid #444; align-items: center; z-index: 10;
         }
         .key { background: #333; padding: 2px 6px; border-radius: 4px; border: 1px solid #666; color: #ffea00; }
     </style>
@@ -128,6 +159,26 @@ game_html = """
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
+        // 화면 비율에 따른 캔버스 크기 맞춤
+        function resizeCanvas() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const targetRatio = 960 / 520;
+            let width = w;
+            let height = w / targetRatio;
+
+            if (height > h) {
+                height = h;
+                width = h * targetRatio;
+            }
+
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        document.addEventListener('fullscreenchange', resizeCanvas);
+
         const QTR_TIME = 60;
         let currentQuarter = 1;
         let p1Score = 0, p2Score = 0, timeLeft = QTR_TIME;
@@ -168,9 +219,10 @@ game_html = """
         const gravity = 0.5;
         const groundY = 430;
 
-        // 전체 화면 토글 (전체 문서 또는 부모 창 대상)
         function toggleFullscreen() {
             initAudio();
+            if (document.activeElement) document.activeElement.blur(); // 버튼 포커스 해제
+
             const elem = document.documentElement;
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                 if (elem.requestFullscreen) {
@@ -201,10 +253,17 @@ game_html = """
         }
 
         function init() {
+            resizeCanvas();
+
             window.addEventListener('keydown', e => {
                 initAudio();
 
-                // 'F' 키를 누르면 전체화면 토글
+                // Space, Enter, ArrowUp/Down 키 누를 때 브라우저 스크롤/버튼 클릭 기본 동작 방지
+                if (['Space', 'Enter', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+                    e.preventDefault();
+                    if (document.activeElement) document.activeElement.blur();
+                }
+
                 if (e.code === 'KeyF') {
                     toggleFullscreen();
                 }
@@ -315,7 +374,6 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 15;
             ball.y = player.y - 30;
 
-            // ON FIRE 상태여도 반드시 초록색 영역(45 ~ 75%) 타이밍을 맞춰야만 성공!
             const isGreenZone = player.gauge >= 45 && player.gauge <= 75;
 
             if (isGreenZone) {
@@ -667,4 +725,4 @@ game_html = """
 </html>
 """
 
-components.html(game_html, height=620)
+components.html(game_html, height=800, scrolling=False)
