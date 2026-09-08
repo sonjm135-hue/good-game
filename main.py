@@ -1,9 +1,9 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="NBA Superstars 2P - Green Giant Sound", layout="wide")
+st.set_page_config(page_title="NBA Superstars 2P - Real Voice Edition", layout="wide")
 
-# Streamlit 기본 여백 및 패딩 제거
+# Streamlit 여백 및 패딩 제거
 st.markdown("""
     <style>
         .block-container {
@@ -106,7 +106,7 @@ game_html = """
     <div id="controls-guide">
         <div><b class="p1-color">CURRY</b>: <span class="key">A</span><span class="key">D</span> 이동 | <span class="key">W</span> 점프 | <span class="key">Space</span> 슛 | <span class="key">E</span> 스틸</div>
         <div><b class="p2-color">LEBRON</b>: <span class="key">←</span><span class="key">→</span> 이동 | <span class="key">↑</span> 점프 | <span class="key">Enter</span> 슛 | <span class="key">K</span> 스틸</div>
-        <div style="color: #00e676;">💡 초록색 게이지 성공 시 <b style="color:#00e676;">"GREEN GIANT!"</b> 사운드 출력</div>
+        <div style="color: #00e676;">🗣️ 초록 게이지 성공 시 <b style="color:#00e676;">진짜 음성</b> 출력!</div>
     </div>
 
     <div id="game-over">
@@ -124,52 +124,36 @@ game_html = """
             if (audioCtx.state === 'suspended') audioCtx.resume();
         }
 
-        // Green Giant 시그니처 사운드 효과음 (Ho Ho Ho! Green Giant)
-        function playGreenGiantSound() {
-            if (!audioCtx) return;
-            const now = audioCtx.currentTime;
+        // 실제 보컬 음성 출력 (SpeechSynthesis API)
+        function playGreenGiantVoice() {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); // 이전 음성 취소
 
-            // "Ho! Ho! Ho!" 3단 고음베이스 사운드
-            const hoTimes = [0, 0.22, 0.44];
-            hoTimes.forEach(t => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(140, now + t);
-                osc.frequency.exponentialRampToValueAtTime(70, now + t + 0.18);
-                gain.gain.setValueAtTime(0.5, now + t);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + t + 0.18);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start(now + t);
-                osc.stop(now + t + 0.18);
-            });
+                const utterance = new SpeechSynthesisUtterance("Ho Ho Ho, Green Giant!");
+                utterance.lang = 'en-US';
+                utterance.pitch = 0.5; // 거인의 굵은 보컬 톤
+                utterance.rate = 0.85;  // 묵직한 템포
+                utterance.volume = 1.0;
 
-            // "Green Giant!" 오케스트라 팡파르 sound
-            const giantTime = now + 0.7;
-            const freqs = [261.63, 329.63, 392.00, 523.25]; // C E G C 코드
-            freqs.forEach((f, idx) => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(f, giantTime);
-                osc.frequency.exponentialRampToValueAtTime(f * 1.2, giantTime + 0.5);
-                gain.gain.setValueAtTime(0.2, giantTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, giantTime + 0.5);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start(giantTime);
-                osc.stop(giantTime + 0.5);
-            });
+                // 영어 남성/굵은 목소리 지원 우선 검색
+                const voices = window.speechSynthesis.getVoices();
+                const maleVoice = voices.find(v => v.lang.includes('en') && (v.name.includes('Male') || v.name.includes('David') || v.name.includes('George')));
+                if (maleVoice) utterance.voice = maleVoice;
+
+                window.speechSynthesis.speak(utterance);
+            }
         }
 
         function playSound(type) {
+            if (type === 'green_giant') {
+                playGreenGiantVoice();
+                return;
+            }
+
             if (!audioCtx) return;
             const now = audioCtx.currentTime;
             
-            if (type === 'green_giant') {
-                playGreenGiantSound();
-            } else if (type === 'hit') {
+            if (type === 'hit') {
                 const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
                 osc.type = 'sawtooth'; osc.frequency.setValueAtTime(220, now);
                 osc.frequency.exponentialRampToValueAtTime(50, now + 0.12);
@@ -294,6 +278,13 @@ game_html = """
 
         function init() {
             resizeCanvas();
+
+            // 음성 가용 목록 로드
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.onvoiceschanged = () => {
+                    window.speechSynthesis.getVoices();
+                };
+            }
 
             window.addEventListener('keydown', e => {
                 initAudio();
@@ -423,7 +414,7 @@ game_html = """
                 ball.vx = dx / timeToRim;
                 ball.vy = (targetHoop.rimY - 15 - ball.y - 0.5 * gravity * Math.pow(timeToRim, 2)) / timeToRim;
 
-                // 초록색 게이지 타이밍 성공 시 GREEN GIANT 사운드 재생!
+                // 초록색 게이지 타이밍 성공 시 음성 재생!
                 playSound('green_giant');
                 screenShake = player.isFire ? 10 : 6;
                 addText(player.isFire ? "🔥 GREEN GIANT FIRE!" : "🥦 HO HO HO! GREEN GIANT!", player.x, player.y - 40, '#00e676', 1.6);
