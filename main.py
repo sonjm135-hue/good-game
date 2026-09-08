@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="2P Basketball with Shot Gauge", layout="wide")
+st.set_page_config(page_title="2P Basketball - 3 Quarters Mode", layout="wide")
 
 game_html = """
 <!DOCTYPE html>
@@ -14,12 +14,12 @@ game_html = """
         canvas { background: #222; border-bottom: 8px solid #555; }
         #ui {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 40px; color: #fff; font-size: 24px; font-weight: bold;
+            display: flex; gap: 30px; color: #fff; font-size: 22px; font-weight: bold;
             background: rgba(0,0,0,0.6); padding: 10px 30px; border-radius: 15px; z-index: 10;
         }
         .p1-color { color: #ff5252; }
         .p2-color { color: #448aff; }
-        #game-over {
+        #game-over, #quarter-notice {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.85); display: none; flex-direction: column;
             justify-content: center; align-items: center; color: #fff; z-index: 20;
@@ -40,7 +40,8 @@ game_html = """
 <body>
     <div id="ui">
         <div>1P: <span id="p1-score" class="p1-color">0</span></div>
-        <div>TIME: <span id="timer" style="color: #ffeb3b;">60</span>s</div>
+        <div style="color: #4caf50;"><span id="quarter-text">1Q</span></div>
+        <div>TIME: <span id="timer" style="color: #ffeb3b;">40</span>s</div>
         <div>2P: <span id="p2-score" class="p2-color">0</span></div>
     </div>
 
@@ -53,17 +54,26 @@ game_html = """
         <div><b class="p2-color">2P (블루)</b>: ←/→ (이동) | ↑ (점프) | Enter (슛 게이지)</div>
     </div>
 
+    <!-- 쿼터 전환 알림 Overlay -->
+    <div id="quarter-notice">
+        <h1 id="quarter-notice-title" style="font-size: 40px; color: #ffb74d; margin: 0;">1Q END</h1>
+        <p style="font-size: 20px; color: #ccc;">잠시 후 다음 쿼터가 시작됩니다...</p>
+    </div>
+
+    <!-- 최종 게임 종료 Overlay -->
     <div id="game-over">
         <h1 id="winner-text" style="font-size: 48px; margin-bottom: 10px;">PLAYER 1 WIN!</h1>
         <p style="font-size: 24px;">최종 스코어 - 1P: <span id="final-p1">0</span> | 2P: <span id="final-p2">0</span></p>
-        <button id="restart-btn" onclick="resetGame()">다시 대결하기</button>
+        <button id="restart-btn" onclick="resetGame()">새 경기 시작하기</button>
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        let p1Score = 0, p2Score = 0, timeLeft = 60;
+        const QUARTER_TIME = 40; // 쿼터당 시간 (초)
+        let currentQuarter = 1;
+        let p1Score = 0, p2Score = 0, timeLeft = QUARTER_TIME;
         let gameActive = true, timerInterval;
 
         const keys = {};
@@ -119,7 +129,6 @@ game_html = """
             window.addEventListener('keyup', e => {
                 keys[e.code] = false;
 
-                // 키를 뗄 때 슛 발사
                 if (e.code === 'Space' && p1.hasBall && p1.isCharging) {
                     shootBall(p1);
                 }
@@ -138,15 +147,45 @@ game_html = """
                 if (!gameActive) return;
                 timeLeft--;
                 document.getElementById('timer').innerText = timeLeft;
-                if (timeLeft <= 0) endGame();
+                
+                if (timeLeft <= 0) {
+                    handleQuarterEnd();
+                }
             }, 1000);
         }
 
+        function handleQuarterEnd() {
+            gameActive = false;
+            clearInterval(timerInterval);
+
+            if (currentQuarter < 3) {
+                // 다음 쿼터 준비
+                const noticeElem = document.getElementById('quarter-notice');
+                document.getElementById('quarter-notice-title').innerText = currentQuarter + "Q END";
+                noticeElem.style.display = 'flex';
+
+                setTimeout(() => {
+                    noticeElem.style.display = 'none';
+                    currentQuarter++;
+                    timeLeft = QUARTER_TIME;
+                    document.getElementById('quarter-text').innerText = currentQuarter + "Q";
+                    document.getElementById('timer').innerText = timeLeft;
+                    resetRoundPositions();
+                    gameActive = true;
+                    startTimer();
+                }, 2000);
+            } else {
+                // 3쿼터 종료 시 최종 게임 종료
+                endGame();
+            }
+        }
+
         function resetGame() {
-            p1Score = 0; p2Score = 0; timeLeft = 60; gameActive = true;
+            p1Score = 0; p2Score = 0; currentQuarter = 1; timeLeft = QUARTER_TIME; gameActive = true;
             document.getElementById('p1-score').innerText = 0;
             document.getElementById('p2-score').innerText = 0;
-            document.getElementById('timer').innerText = 60;
+            document.getElementById('quarter-text').innerText = "1Q";
+            document.getElementById('timer').innerText = QUARTER_TIME;
             document.getElementById('game-over').style.display = 'none';
 
             resetRoundPositions();
@@ -181,17 +220,14 @@ game_html = """
             ball.x = player.x + player.width / 2 + player.facing * 10;
             ball.y = player.y - 10;
 
-            // 게이지 65% ~ 80% 사이(초록색 영역)이면 Perfect Shoot!
             const perfectMin = 65;
             const perfectMax = 80;
             const powerRatio = player.gauge / 100;
 
             if (player.gauge >= perfectMin && player.gauge <= perfectMax) {
-                // Perfect 슛: 무조건 림 안쪽으로 깔끔하게 비상
                 ball.vx = (dx / dist) * (6.2 + dist * 0.0082);
                 ball.vy = -13.0;
             } else {
-                // 게이지 미달/초과: 빗나가는 파워 적용
                 const multiplier = powerRatio < 0.65 ? (0.6 + powerRatio * 0.5) : (1.1 + powerRatio * 0.2);
                 ball.vx = (dx / dist) * (6.5 + dist * 0.008) * multiplier;
                 ball.vy = -12.5 * (0.8 + powerRatio * 0.3);
@@ -221,7 +257,6 @@ game_html = """
                 p.isGrounded = true;
             }
 
-            // 게이지 충전 업데이트 (0 -> 100 -> 0 왕복)
             if (p.isCharging && p.hasBall) {
                 p.gauge += p.gaugeDir * 2.5;
                 if (p.gauge >= 100) { p.gauge = 100; p.gaugeDir = -1; }
@@ -336,26 +371,21 @@ game_html = """
 
             ctx.restore();
 
-            // 슛 게이지 그리기 (공 소유 시)
             if (p.hasBall) {
                 const gaugeWidth = 60;
                 const gaugeHeight = 10;
                 const gx = p.x + p.width / 2 - gaugeWidth / 2;
                 const gy = p.y - 25;
 
-                // 게이지 배경
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 ctx.fillRect(gx - 2, gy - 2, gaugeWidth + 4, gaugeHeight + 4);
 
-                // 빨간색/노란색 영역
                 ctx.fillStyle = '#ff9800';
                 ctx.fillRect(gx, gy, gaugeWidth, gaugeHeight);
 
-                // Green Zone (65% ~ 80%)
                 ctx.fillStyle = '#4caf50';
                 ctx.fillRect(gx + gaugeWidth * 0.65, gy, gaugeWidth * 0.15, gaugeHeight);
 
-                // 현재 게이지 indicator
                 const barX = gx + (p.gauge / 100) * gaugeWidth;
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(barX - 1.5, gy - 2, 3, gaugeHeight + 4);
