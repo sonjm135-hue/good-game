@@ -46,7 +46,7 @@ game_html = """
     <div id="ui-overlay">
         <div>📍 <span id="level-title" style="font-weight: bold; color: #ffffa0;">LEVEL 0: THE LOBBY</span></div>
         <div>🔦 손전등: <span id="flashlight-status" style="color: #ffff00;">ON (F)</span> | 🧍 상태: <span id="crouch-status" style="color: #ffffff;">서있음 (C)</span></div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">[WASD] 이동 | [Q / E] 시점 회전 | [C] 숙이기 | [F] 손전등/습득</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">[W/A/D] 이동 | [S] 아래 보기 | [Q/E] 좌우 회전 | [C] 숙이기 | [F] 손전등/습득</div>
         <div id="game-status" style="color: #ffcc00; margin-top: 5px; font-weight: bold;">🎯 목표: 맵 구석의 아이템을 찾아 녹색 비상문으로 탈출하세요!</div>
     </div>
     
@@ -54,16 +54,16 @@ game_html = """
         <h1 style="color: #d1b838; font-size: 60px; margin-bottom: 0px; letter-spacing: 6px;">THE BACKROOMS</h1>
         <p style="font-size: 16px; color: #a39655; margin-top: 15px; max-width: 600px; line-height: 1.6;">
             백룸의 깊은 층으로 떨어졌습니다.<br>
+            • <b>[W/A/D]로 이동</b>하고, <b>[S]키로 바닥/아래</b>를 볼 수 있습니다.<br>
             • <b>[Q] / [E] 키로 시점을 회전</b>하세요.<br>
-            • 각 레벨마다 달라지는 <b>괴물과 맵 구조</b>를 파악하세요.<br>
-            • 벽에 부딪히지 않게 조심하며 <b>Level 0부터 Level 3까지 탈출</b>하세요!
+            • 괴물에게 사냥당하면 사망합니다! <b>Level 0부터 Level 3까지 탈출</b>하세요!
         </p>
         <button id="start-btn">NOCLIP IN</button>
     </div>
 
     <div id="end-screen">
-        <h1 id="end-title" style="font-size: 70px; letter-spacing: 4px;">YOU ESCAPED</h1>
-        <p id="end-desc" style="font-size: 18px; color: #aaa; margin-top: 10px;">모든 레벨을 무사히 탈출했습니다!</p>
+        <h1 id="end-title" style="font-size: 70px; letter-spacing: 4px;">YOU DIED</h1>
+        <p id="end-desc" style="font-size: 18px; color: #aaa; margin-top: 10px;">괴물에게 잡혔습니다...</p>
         <p style="font-size: 14px; color: #666; margin-top: 30px;">F5 키를 눌러 다시 시작하기</p>
     </div>
 
@@ -87,10 +87,7 @@ game_html = """
         let keyMesh, exitDoorMesh, monsterMesh, monsterEyeMat;
         let isChasing = false;
 
-        // 물리 충돌을 처리할 벽 객체 바운딩 박스 리스트
         let wallBoxes = [];
-
-        // 개구멍 구역 (특수 벽)
         const holeBounds = { xMin: -11.0, xMax: -9.0, zMin: -8.0, zMax: 2.0 };
 
         let waypoints = [];
@@ -177,7 +174,6 @@ game_html = """
             mainFluorescentLight.position.set(0, 4.8, 0);
             scene.add(mainFluorescentLight);
 
-            // 대형 바닥 & 천장
             const floorGeo = new THREE.PlaneGeometry(80, 80);
             const floorMat = new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.8 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -191,10 +187,8 @@ game_html = """
             ceil.rotation.x = Math.PI / 2;
             scene.add(ceil);
 
-            // 레벨별 전용 맵 구축
             buildLevelMaze(currentLevel, theme.wall);
 
-            // 탈출 비상문
             const doorGeo = new THREE.BoxGeometry(2.5, 4.0, 0.2);
             const doorMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
             exitDoorMesh = new THREE.Mesh(doorGeo, doorMat);
@@ -205,14 +199,12 @@ game_html = """
             doorLight.position.set(0, 4.0, 37.5);
             scene.add(doorLight);
 
-            // 아몬드 워터 (열쇠)
             const keyGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 8);
             const keyMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0x888800 });
             keyMesh = new THREE.Mesh(keyGeo, keyMat);
             keyMesh.position.set(32, 0.6, -32);
             scene.add(keyMesh);
 
-            // 레벨별 괴물 생성
             createMonsterForLevel(currentLevel);
 
             camera.position.set(0, 1.6, 32);
@@ -220,7 +212,6 @@ game_html = """
             gameStatus.style.color = "#ffcc00";
         }
 
-        // 벽 생성 및 물리 충돌 보더 등록 함수
         function createWall(x, y, z, w, h, d, color) {
             const wallMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
             const geo = new THREE.BoxGeometry(w, h, d);
@@ -228,21 +219,17 @@ game_html = """
             wall.position.set(x, y, z);
             scene.add(wall);
 
-            // 물리 판정 박스 추가
             const box = new THREE.Box3().setFromObject(wall);
             wallBoxes.push(box);
         }
 
-        // 레벨별 독특한 맵 레이아웃 생성
         function buildLevelMaze(level, wallColor) {
-            // 외곽 벽 공통
             createWall(0, 2.5, -39.5, 80, 5, 0.8, wallColor);
             createWall(0, 2.5, 39.5, 80, 5, 0.8, wallColor);
             createWall(-39.5, 2.5, 0, 0.8, 5, 80, wallColor);
             createWall(39.5, 2.5, 0, 0.8, 5, 80, wallColor);
 
             if (level === 0) {
-                // Level 0: 표준 격자 미로
                 createWall(15, 2.5, -15, 0.8, 5, 40, wallColor);
                 createWall(-15, 2.5, 15, 40, 5, 0.8, wallColor);
                 createWall(20, 2.5, 15, 0.8, 5, 30, wallColor);
@@ -256,7 +243,6 @@ game_html = """
                     new THREE.Vector3(-30, 0, 30)
                 ];
             } else if (level === 1) {
-                // Level 1: 긴 공장형 일자 복도 및 창고
                 createWall(-10, 2.5, 0, 0.8, 5, 60, wallColor);
                 createWall(10, 2.5, 0, 0.8, 5, 60, wallColor);
                 createWall(-25, 2.5, -20, 30, 5, 0.8, wallColor);
@@ -269,7 +255,6 @@ game_html = """
                     new THREE.Vector3(-25, 0, 0)
                 ];
             } else if (level === 2) {
-                // Level 2: 구불구불한 좁은 지하 통로
                 createWall(0, 2.5, 10, 50, 5, 0.8, wallColor);
                 createWall(-10, 2.5, -10, 50, 5, 0.8, wallColor);
                 createWall(20, 2.5, -25, 0.8, 5, 30, wallColor);
@@ -282,7 +267,6 @@ game_html = """
                     new THREE.Vector3(0, 0, 30)
                 ];
             } else if (level === 3) {
-                // Level 3: 발전소 고난도 세밀 미로
                 createWall(-15, 2.5, 0, 0.8, 5, 40, wallColor);
                 createWall(15, 2.5, 0, 0.8, 5, 40, wallColor);
                 createWall(0, 2.5, -15, 30, 5, 0.8, wallColor);
@@ -298,16 +282,13 @@ game_html = """
                 ];
             }
 
-            // 개구멍 벽 (공통 적용)
             createWall(-10, 3.1, -3, 20, 3.8, 0.8, wallColor);
         }
 
-        // 레벨별 개성 있는 괴물 생성
         function createMonsterForLevel(level) {
             monsterMesh = new THREE.Group();
 
             if (level === 0) {
-                // Level 0: Bacteria (기본 키 큰 기형체)
                 const bodyGeo = new THREE.CylinderGeometry(0.3, 0.4, 3.2, 6);
                 const bodyMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 });
                 const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -324,7 +305,6 @@ game_html = """
                 monsterMesh.add(eye2);
 
             } else if (level === 1) {
-                // Level 1: Smiler (얼굴만 어둠 속에서 빛나는 괴물)
                 const faceGeo = new THREE.SphereGeometry(1.2, 16, 16);
                 const faceMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
                 const face = new THREE.Mesh(faceGeo, faceMat);
@@ -341,7 +321,6 @@ game_html = """
                 monsterMesh.add(eye2);
 
             } else if (level === 2) {
-                // Level 2: Skin-Stealer (긴 왜곡 팔다리를 가진 괴물)
                 const bodyGeo = new THREE.BoxGeometry(0.8, 2.2, 0.5);
                 const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3d2011, roughness: 0.9 });
                 const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -365,7 +344,6 @@ game_html = """
                 monsterMesh.add(head);
 
             } else if (level === 3) {
-                // Level 3: Hound (사족보행 맹수형 괴물)
                 const bodyGeo = new THREE.BoxGeometry(0.9, 0.7, 2.2);
                 const bodyMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
                 const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -410,7 +388,6 @@ game_html = """
             }
         }
 
-        // 강화된 AABB 물리 충돌 검사 (벽 뚫림 방지)
         function checkWallCollision(targetPos, radius = 0.6) {
             const playerBox = new THREE.Box3(
                 new THREE.Vector3(targetPos.x - radius, 0, targetPos.z - radius),
@@ -419,7 +396,7 @@ game_html = """
 
             for (let i = 0; i < wallBoxes.length; i++) {
                 if (playerBox.intersectsBox(wallBoxes[i])) {
-                    return true; // 충돌 발생
+                    return true;
                 }
             }
             return false;
@@ -436,10 +413,14 @@ game_html = """
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
-            // Q, E 키 시점 회전
+            // Q, E 키 시점 좌우 회전
             const rotateSpeed = 1.8 * delta;
             if (keys['KeyQ']) camera.rotation.y += rotateSpeed;
             if (keys['KeyE']) camera.rotation.y -= rotateSpeed;
+
+            // [S 키 조작: 아래 둘러보기]
+            const targetPitch = keys['KeyS'] ? -Math.PI / 3.5 : 0;
+            camera.rotation.x += (targetPitch - camera.rotation.x) * 8.0 * delta;
 
             if (Math.random() < 0.03) {
                 mainFluorescentLight.intensity = Math.random() * 0.8 + 0.2;
@@ -452,7 +433,6 @@ game_html = """
 
             const moveSpeed = (isCrouching ? 3.0 : 6.0) * delta;
             
-            // 물리 충돌을 고려한 독립 축 이동 알고리즘 (벽 비벼서 이동 가능)
             const forwardDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
             forwardDir.y = 0; forwardDir.normalize();
 
@@ -462,17 +442,14 @@ game_html = """
             let moveVector = new THREE.Vector3();
 
             if (keys['KeyW'] || keys['ArrowUp']) moveVector.addScaledVector(forwardDir, moveSpeed);
-            if (keys['KeyS'] || keys['ArrowDown']) moveVector.addScaledVector(forwardDir, -moveSpeed);
             if (keys['KeyA'] || keys['ArrowLeft']) moveVector.addScaledVector(sideDir, -moveSpeed);
             if (keys['KeyD'] || keys['ArrowRight']) moveVector.addScaledVector(sideDir, moveSpeed);
 
-            // X축 이동 및 충돌 체크
             const nextPosX = new THREE.Vector3(camera.position.x + moveVector.x, camera.position.y, camera.position.z);
             if (!checkWallCollision(nextPosX)) {
                 camera.position.x = nextPosX.x;
             }
 
-            // Z축 이동 및 충돌 체크
             const nextPosZ = new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z + moveVector.z);
             if (!checkWallCollision(nextPosZ)) {
                 camera.position.z = nextPosZ.z;
@@ -488,7 +465,7 @@ game_html = """
                 }
             }
 
-            // [괴물 AI]
+            // [괴물 AI 및 잡힘/사망 판정]
             const distToPlayer = monsterMesh.position.distanceTo(camera.position);
             const currentSpeed = levelThemes[currentLevel].monsterSpeed;
 
@@ -533,17 +510,17 @@ game_html = """
                 }
             }
 
-            // 사망 판정
+            // [괴물에게 잡혔을 시 즉시 사망]
             if (distToPlayer < 1.8) {
                 gameOver = true;
                 endScreen.style.display = 'flex';
                 endScreen.style.background = '#110000';
                 endTitle.innerText = "YOU DIED";
                 endTitle.style.color = "#8b0000";
-                endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 ${levelThemes[currentLevel].monsterName}에게 잡혔습니다...`;
+                endDesc.innerText = `[${levelThemes[currentLevel].name}]에서 ${levelThemes[currentLevel].monsterName}에게 잡혀 죽었습니다...`;
             }
 
-            // 레벨 클리어 판정
+            // 탈출 성공 판정
             const distDoor = camera.position.distanceTo(exitDoorMesh.position);
             if (distDoor < 3.0 && hasKey) {
                 if (currentLevel < maxLevel) {
@@ -554,7 +531,7 @@ game_html = """
                     endScreen.style.background = '#0a1a0a';
                     endTitle.innerText = "ALL LEVELS ESCAPED!";
                     endTitle.style.color = "#00ff00";
-                    endDesc.innerText = "🎉 백룸의 모든 레벨과 괴물들을 따돌리고 최종 탈출했습니다!";
+                    endDesc.innerText = "🎉 백룸의 모든 레벨을 무사히 탈출했습니다!";
                 }
             }
 
